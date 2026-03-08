@@ -1,0 +1,5 @@
+{
+  "name": "백동초등학교 학생생활기록부(담임v1.01)",
+  "description": "A web application for teachers to manage student basic survey information. It provides a dashboard to view student data and a form for data entry, replacing traditional paper-based methods.",
+  "requestFramePermissions": []
+}

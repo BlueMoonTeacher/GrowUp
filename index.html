@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title></title>
+    <link rel="manifest" href="manifest.json" />
+    <link rel="icon" href="https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Seedling/3D/seedling_3d.png" />
+    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Seedling/3D/seedling_3d.png" />
+    <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.1",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/"
+  }
+}
+</script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class', // Disable automatic dark mode based on system settings
+        theme: {
+          extend: {
+            colors: {
+              'primary': '#22c55e', // green-500
+              'primary-focus': '#16a34a', // green-600
+              'primary-content': '#ffffff',
+              
+              'secondary': '#f0fdf4', // green-50
+              'secondary-focus': '#dcfce7', // green-100
+              'secondary-content': '#14532d', // green-900
+              
+              'accent': '#facc15', // yellow-400
+              
+              'neutral': '#f3f4f6', // gray-100 (page background)
+              'base-100': '#ffffff', // white (card background)
+              'base-200': '#f9fafb', // gray-50 (input backgrounds, hover states)
+              'base-300': '#e5e7eb', // gray-200 (borders, disabled states)
+              
+              'base-content': '#1f2937', // gray-800 (main text)
+              'base-content-secondary': '#6b7280', // gray-500 (subtle text)
+            },
+            boxShadow: {
+                'lg': '0 10px 15px -3px rgb(0 0 0 / 0.07), 0 4px 6px -4px rgb(0 0 0 / 0.07)',
+                'xl': '0 20px 25px -5px rgb(0 0 0 / 0.07), 0 8px 10px -6px rgb(0 0 0 / 0.07)',
+            },
+            borderRadius: {
+                'xl': '1rem', // 16px
+                '2xl': '1.5rem', // 24px
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      html, body {
+        height: 100%;
+        overflow: hidden; /* Prevent whole page scroll, we scroll internal containers */
+        overscroll-behavior: none; /* Prevent bounce effects on mobile */
+        background-color: #f3f4f6 !important; /* Force light background */
+        color: #1f2937 !important; /* Force dark text */
+      }
+      
+      /* Force light mode styles even if system is dark */
+      @media (prefers-color-scheme: dark) {
+        body {
+          background-color: #f3f4f6 !important;
+          color: #1f2937 !important;
+        }
+      }
+      
+      /* Hide scrollbar for Chrome, Safari and Opera */
+      .custom-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+
+      /* Hide scrollbar for IE, Edge and Firefox */
+      .custom-scrollbar {
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
+      }
+      
+      /* Style for the date picker icon to ensure visibility */
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        cursor: pointer;
+        opacity: 0.6;
+        filter: invert(0.4);
+        transition: opacity 0.2s;
+      }
+
+      input[type="date"]::-webkit-calendar-picker-indicator:hover {
+        opacity: 1;
+      }
+    </style>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-analytics.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+  <link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

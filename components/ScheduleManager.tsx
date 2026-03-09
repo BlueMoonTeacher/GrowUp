@@ -56,91 +56,74 @@ interface ChecklistSectionProps {
     };
 }
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PREVIEW_COUNT = 4;
 
 const ChecklistSection = ({ title, type, items, onAdd, onToggle, onDelete, colorTheme }: ChecklistSectionProps) => {
     const [newItemText, setNewItemText] = useState('');
-    const [currentPage, setCurrentPage] = useState(0);
+    const [isExpanded, setIsExpanded] = useState(false);
 
-    const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE);
-    
-    // Reset to page 0 if items change significantly (optional, but safer)
-    useEffect(() => {
-        if (currentPage >= totalPages && totalPages > 0) {
-            setCurrentPage(totalPages - 1);
-        }
-    }, [items.length, totalPages, currentPage]);
-
-    const currentItems = items.slice(
-        currentPage * ITEMS_PER_PAGE,
-        (currentPage + 1) * ITEMS_PER_PAGE
-    );
+    const hasMoreItems = items.length > ITEMS_PREVIEW_COUNT;
+    const currentItems = isExpanded || !hasMoreItems ? items : items.slice(0, ITEMS_PREVIEW_COUNT);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (newItemText.trim()) {
             onAdd(type, newItemText.trim());
             setNewItemText('');
-            // Optional: Move to last page on add
-            // setTimeout(() => setCurrentPage(Math.ceil((items.length + 1) / ITEMS_PER_PAGE) - 1), 100);
+            // Automatically expand when adding new items if it exceeds the preview count
+            if (!isExpanded && items.length >= ITEMS_PREVIEW_COUNT) {
+                setIsExpanded(true);
+            }
         }
     };
 
-    const handlePrev = () => setCurrentPage(prev => Math.max(0, prev - 1));
-    const handleNext = () => setCurrentPage(prev => Math.min(totalPages - 1, prev + 1));
-
     return (
-        <div className={`${colorTheme.bg} rounded-xl p-4 border ${colorTheme.border} shadow-sm flex flex-col`}>
-            {/* Header with Pagination Controls */}
+        <div className={`${colorTheme.bg} rounded-xl p-4 border ${colorTheme.border} shadow-sm flex flex-col transition-all duration-300`}>
+            {/* Header with Expand/Collapse Toggle */}
             <div className="flex items-center justify-between mb-3 shrink-0 h-8">
                 <div className="flex items-center gap-2">
                     <span className="text-lg">{colorTheme.icon}</span>
                     <h3 className={`font-bold ${colorTheme.title}`}>{title}</h3>
                 </div>
-                
-                {/* Pagination Controls - Only show if multiple pages */}
-                {totalPages > 1 && (
-                    <div className="flex items-center bg-white/60 rounded-lg px-1 py-0.5 border border-black/5">
-                        <button 
-                            onClick={handlePrev} 
-                            disabled={currentPage === 0}
-                            className="p-1 hover:bg-white rounded disabled:opacity-30 transition-colors"
+
+                {/* Expand/Collapse Toggle - Only show if items exceed preview count */}
+                {hasMoreItems && (
+                    <button
+                        onClick={() => setIsExpanded(!isExpanded)}
+                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all border
+                            ${isExpanded
+                                ? `bg-white ${colorTheme.title} ${colorTheme.border} shadow-sm`
+                                : `bg-white/60 text-gray-500 border-transparent hover:bg-white hover:text-gray-700`
+                            }
+                        `}
+                    >
+                        <span>{isExpanded ? '접기' : `+${items.length - ITEMS_PREVIEW_COUNT} 더보기`}</span>
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className={`h-3 w-3 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                            </svg>
-                        </button>
-                        <span className="text-[10px] font-bold text-gray-500 min-w-[2.5rem] text-center select-none">
-                            {currentPage + 1} / {totalPages}
-                        </span>
-                        <button 
-                            onClick={handleNext} 
-                            disabled={currentPage === totalPages - 1}
-                            className="p-1 hover:bg-white rounded disabled:opacity-30 transition-colors"
-                        >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                        </button>
-                    </div>
+                            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
+                    </button>
                 )}
             </div>
-            
-            {/* Items List - Fixed Height to prevent layout shifting */}
-            <div className="flex-1 min-h-[160px] max-h-[160px] overflow-y-auto custom-scrollbar space-y-1 mb-3">
+
+            {/* Items List - Dynamic Height */}
+            <div className={`overflow-y-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[800px]' : 'max-h-[250px]'} space-y-1 mb-3`}>
                 {currentItems.length > 0 ? (
                     currentItems.map(item => (
-                        <div 
-                            key={item.id} 
+                        <div
+                            key={item.id}
                             className="group flex items-start gap-2 text-sm animate-[fadeIn_0.2s_ease-out] p-1.5 rounded-lg hover:bg-white/80 hover:shadow-sm transition-all"
                         >
                             <button
                                 onClick={() => onToggle(item.id, item.isChecked)}
-                                className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
-                                    item.isChecked 
-                                    ? `bg-${colorTheme.accent} border-${colorTheme.accent} text-white` 
+                                className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${item.isChecked
+                                    ? `bg-${colorTheme.accent} border-${colorTheme.accent} text-white`
                                     : `bg-white border-gray-300 hover:border-${colorTheme.accent}`
-                                }`}
+                                    }`}
                             >
                                 {item.isChecked && (
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
@@ -151,7 +134,7 @@ const ChecklistSection = ({ title, type, items, onAdd, onToggle, onDelete, color
                             <span className={`flex-1 break-words leading-tight transition-all ${item.isChecked ? 'text-gray-400 line-through' : 'text-gray-700 font-medium'}`}>
                                 {item.content}
                             </span>
-                            <button 
+                            <button
                                 onClick={() => onDelete(item.id)}
                                 className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
                             >
@@ -169,8 +152,8 @@ const ChecklistSection = ({ title, type, items, onAdd, onToggle, onDelete, color
             </div>
 
             <form onSubmit={handleSubmit} className="shrink-0 mt-auto">
-                <input 
-                    type="text" 
+                <input
+                    type="text"
                     value={newItemText}
                     onChange={(e) => setNewItemText(e.target.value)}
                     placeholder="항목 추가..."
@@ -219,28 +202,28 @@ const SettingsModal = ({ currentSettings, onSave, onClose }: { currentSettings: 
 
     return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-             <div 
-                className="bg-white rounded-xl shadow-2xl w-full max-w-lg border border-base-300 max-h-[90vh] flex flex-col" 
+            <div
+                className="bg-white rounded-xl shadow-2xl w-full max-w-lg border border-base-300 max-h-[90vh] flex flex-col"
                 onClick={e => e.stopPropagation()}
                 onKeyDown={handleKeyDown}
             >
                 <div className="p-4 border-b border-base-200 bg-base-50 flex justify-between items-center rounded-t-xl shrink-0">
                     <h3 className="text-xl font-bold text-base-content flex items-center gap-2">
-                        <span>⚙️</span> 일정 설정
+                        일정 설정
                     </h3>
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
                         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
-                
+
                 <div className="p-6 overflow-y-auto custom-scrollbar">
                     <div className="mb-6">
                         <label className="block text-sm font-bold text-gray-700 mb-3">분류(Category) 관리</label>
                         <div className="space-y-3">
                             {settings.categories.map((cat, index) => (
                                 <div key={cat.id} className="flex items-center gap-2">
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         value={cat.label}
                                         onChange={(e) => handleLabelChange(index, e.target.value)}
                                         className="flex-1 p-2 border border-base-300 rounded text-sm bg-white text-gray-900 focus:ring-primary focus:border-primary"
@@ -257,7 +240,7 @@ const SettingsModal = ({ currentSettings, onSave, onClose }: { currentSettings: 
                                             </option>
                                         ))}
                                     </select>
-                                    <button 
+                                    <button
                                         onClick={() => handleDeleteCategory(index)}
                                         className="p-2 text-gray-400 hover:text-red-500 rounded hover:bg-red-50"
                                         disabled={settings.categories.length <= 1}
@@ -270,7 +253,7 @@ const SettingsModal = ({ currentSettings, onSave, onClose }: { currentSettings: 
                                 </div>
                             ))}
                         </div>
-                        <button 
+                        <button
                             onClick={handleAddCategory}
                             className="mt-3 text-sm font-bold text-primary hover:text-primary-focus flex items-center gap-1"
                         >
@@ -284,23 +267,23 @@ const SettingsModal = ({ currentSettings, onSave, onClose }: { currentSettings: 
                             <label className="flex items-center justify-between p-3 bg-base-50 rounded-lg border border-base-200 cursor-pointer hover:bg-base-100 transition-colors">
                                 <span className="text-sm font-bold text-gray-700">달력에 시간 표시</span>
                                 <div className="relative inline-flex items-center cursor-pointer">
-                                    <input 
-                                        type="checkbox" 
+                                    <input
+                                        type="checkbox"
                                         checked={settings.viewOptions.showTime}
-                                        onChange={(e) => setSettings({...settings, viewOptions: {...settings.viewOptions, showTime: e.target.checked}})}
+                                        onChange={(e) => setSettings({ ...settings, viewOptions: { ...settings.viewOptions, showTime: e.target.checked } })}
                                         className="sr-only peer"
                                     />
                                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                                 </div>
                             </label>
-                            
+
                             <label className="flex items-center justify-between p-3 bg-base-50 rounded-lg border border-base-200 cursor-pointer hover:bg-base-100 transition-colors">
                                 <span className="text-sm font-bold text-gray-700">달력에 장소 표시</span>
                                 <div className="relative inline-flex items-center cursor-pointer">
-                                    <input 
-                                        type="checkbox" 
+                                    <input
+                                        type="checkbox"
                                         checked={settings.viewOptions.showLocation}
-                                        onChange={(e) => setSettings({...settings, viewOptions: {...settings.viewOptions, showLocation: e.target.checked}})}
+                                        onChange={(e) => setSettings({ ...settings, viewOptions: { ...settings.viewOptions, showLocation: e.target.checked } })}
                                         className="sr-only peer"
                                     />
                                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
@@ -314,14 +297,14 @@ const SettingsModal = ({ currentSettings, onSave, onClose }: { currentSettings: 
                     <button onClick={onClose} className="px-5 py-2 rounded-lg font-bold text-gray-600 hover:bg-gray-200 transition-colors">
                         취소
                     </button>
-                    <button 
+                    <button
                         onClick={() => onSave(settings)}
                         className="px-6 py-2 rounded-lg font-bold text-white bg-primary hover:bg-primary-focus shadow-md transition-all"
                     >
                         저장하기 (Enter)
                     </button>
                 </div>
-             </div>
+            </div>
         </div>
     );
 };
@@ -339,14 +322,14 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
     const [location, setLocation] = useState('');
     const [time, setTime] = useState('14:00');
     const [memo, setMemo] = useState('');
-    
+
     const [startDate, setStartDate] = useState(getTodayString());
     const [endDate, setEndDate] = useState(getTodayString());
-    
+
     const [recurrenceType, setRecurrenceType] = useState<'weekly' | 'monthly'>('weekly');
     const [selectedWeekDays, setSelectedWeekDays] = useState<boolean[]>([false, true, false, false, false, false, false]); // Sun to Sat
     const [selectedMonthDay, setSelectedMonthDay] = useState<number>(1);
-    
+
     const [isSaving, setIsSaving] = useState(false);
 
     const weekDaysLabel = ['일', '월', '화', '수', '목', '금', '토'];
@@ -417,14 +400,14 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
 
     return (
         <div className="fixed inset-0 z-[65] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
-            <div 
-                className="bg-white rounded-xl shadow-2xl w-full max-w-lg border border-base-300 max-h-[90vh] flex flex-col" 
+            <div
+                className="bg-white rounded-xl shadow-2xl w-full max-w-lg border border-base-300 max-h-[90vh] flex flex-col"
                 onClick={e => e.stopPropagation()}
                 onKeyDown={handleKeyDown}
             >
                 <div className="p-4 border-b border-base-200 bg-base-50 flex justify-between items-center rounded-t-xl shrink-0">
                     <h3 className="text-xl font-bold text-base-content flex items-center gap-2">
-                        <span>🔄</span> 고정 일정(반복) 등록
+                        고정 일정(반복) 등록
                     </h3>
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
                         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -436,8 +419,8 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                     <div className="grid grid-cols-2 gap-4">
                         <div className="col-span-2">
                             <label className="block text-xs font-bold text-base-content-secondary mb-1.5">할 일 (내용)</label>
-                            <input 
-                                type="text" 
+                            <input
+                                type="text"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
                                 placeholder="반복되는 일정 내용"
@@ -446,8 +429,8 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-base-content-secondary mb-1.5">시간</label>
-                            <input 
-                                type="time" 
+                            <input
+                                type="time"
                                 value={time}
                                 onChange={(e) => setTime(e.target.value)}
                                 className="w-full p-2.5 bg-white border border-base-300 rounded-lg text-sm"
@@ -455,8 +438,8 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-base-content-secondary mb-1.5">장소</label>
-                            <input 
-                                type="text" 
+                            <input
+                                type="text"
                                 value={location}
                                 onChange={(e) => setLocation(e.target.value)}
                                 className="w-full p-2.5 bg-white border border-base-300 rounded-lg text-sm"
@@ -470,8 +453,8 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                                         key={cat.id}
                                         onClick={() => setCategory(cat.label)}
                                         className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-all
-                                            ${category === cat.label 
-                                                ? `${cat.colorClass} ring-2 ring-offset-1 ring-current shadow-sm` 
+                                            ${category === cat.label
+                                                ? `${cat.colorClass} ring-2 ring-offset-1 ring-current shadow-sm`
                                                 : 'bg-white border-base-300 text-base-content-secondary hover:bg-base-50'
                                             }
                                         `}
@@ -491,8 +474,8 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                         <div className="grid grid-cols-2 gap-4 mb-4">
                             <div>
                                 <label className="block text-xs font-bold text-base-content-secondary mb-1.5">시작일</label>
-                                <input 
-                                    type="date" 
+                                <input
+                                    type="date"
                                     value={startDate}
                                     onChange={(e) => setStartDate(e.target.value)}
                                     className="w-full p-2.5 bg-white border border-base-300 rounded-lg text-sm"
@@ -500,8 +483,8 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-base-content-secondary mb-1.5">종료일</label>
-                                <input 
-                                    type="date" 
+                                <input
+                                    type="date"
                                     value={endDate}
                                     onChange={(e) => setEndDate(e.target.value)}
                                     className="w-full p-2.5 bg-white border border-base-300 rounded-lg text-sm"
@@ -511,20 +494,20 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
 
                         <div className="flex gap-4 mb-3">
                             <label className="flex items-center gap-2 cursor-pointer">
-                                <input 
-                                    type="radio" 
-                                    name="recurrence" 
-                                    checked={recurrenceType === 'weekly'} 
+                                <input
+                                    type="radio"
+                                    name="recurrence"
+                                    checked={recurrenceType === 'weekly'}
                                     onChange={() => setRecurrenceType('weekly')}
                                     className="radio radio-primary radio-sm"
                                 />
                                 <span className="text-sm font-bold">매주 (요일 선택)</span>
                             </label>
                             <label className="flex items-center gap-2 cursor-pointer">
-                                <input 
-                                    type="radio" 
-                                    name="recurrence" 
-                                    checked={recurrenceType === 'monthly'} 
+                                <input
+                                    type="radio"
+                                    name="recurrence"
+                                    checked={recurrenceType === 'monthly'}
                                     onChange={() => setRecurrenceType('monthly')}
                                     className="radio radio-primary radio-sm"
                                 />
@@ -540,7 +523,7 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                                             key={day}
                                             onClick={() => toggleWeekDay(idx)}
                                             className={`w-10 h-10 rounded-full text-sm font-bold transition-all shadow-sm
-                                                ${selectedWeekDays[idx] 
+                                                ${selectedWeekDays[idx]
                                                     ? idx === 0 ? 'bg-red-500 text-white' : idx === 6 ? 'bg-blue-500 text-white' : 'bg-primary text-white'
                                                     : 'bg-white border border-base-300 text-gray-500 hover:bg-gray-100'
                                                 }
@@ -553,10 +536,10 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                             ) : (
                                 <div className="flex items-center gap-3">
                                     <span className="text-sm font-bold">매월</span>
-                                    <input 
-                                        type="number" 
-                                        min="1" 
-                                        max="31" 
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="31"
                                         value={selectedMonthDay}
                                         onChange={(e) => setSelectedMonthDay(parseInt(e.target.value))}
                                         className="w-20 p-2 bg-white border border-base-300 rounded-lg text-center font-bold"
@@ -572,7 +555,7 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                     <button onClick={onClose} className="px-5 py-2 rounded-lg font-bold text-gray-600 hover:bg-gray-200 transition-colors">
                         취소
                     </button>
-                    <button 
+                    <button
                         onClick={handleGenerateAndSave}
                         disabled={isSaving}
                         className="px-6 py-2 rounded-lg font-bold text-white bg-primary hover:bg-primary-focus shadow-md transition-all flex items-center gap-2"
@@ -593,10 +576,10 @@ const ScheduleManager = (): React.ReactElement => {
     const [events, setEvents] = useState<ScheduleEvent[]>([]);
     const [settings, setSettings] = useState<ScheduleSettings>(DEFAULT_SETTINGS);
     const [loading, setLoading] = useState(false);
-    
+
     // Checklist State
     const [checklists, setChecklists] = useState<ChecklistItem[]>([]);
-    
+
     // UI States
     const [isEventModalOpen, setIsEventModalOpen] = useState(false);
     const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
@@ -622,7 +605,7 @@ const ScheduleManager = (): React.ReactElement => {
         const fetchData = async () => {
             const user = auth.currentUser;
             if (!user) return;
-            
+
             setLoading(true);
             try {
                 // Fetch Settings
@@ -653,7 +636,7 @@ const ScheduleManager = (): React.ReactElement => {
     const handleSaveEvent = async () => {
         const user = auth.currentUser;
         if (!user) return;
-        
+
         if (!formData.title.trim()) {
             await showAlert("일정 내용을 입력해주세요.");
             return;
@@ -726,7 +709,7 @@ const ScheduleManager = (): React.ReactElement => {
             await firestore.collection('users').doc(user.uid).collection('appData').doc('scheduleSettings').set(newSettings);
             setSettings(newSettings);
             setIsSettingsModalOpen(false);
-            
+
             // Check if current form category is still valid, if not reset to first available
             if (newSettings.categories.length > 0 && !newSettings.categories.find(c => c.label === formData.category)) {
                 setFormData(prev => ({ ...prev, category: newSettings.categories[0].label }));
@@ -798,47 +781,47 @@ const ScheduleManager = (): React.ReactElement => {
     const calendarDays = useMemo(() => {
         const firstDayOfMonth = new Date(year, month, 1);
         const lastDayOfMonth = new Date(year, month + 1, 0);
-        
+
         const startDayOfWeek = firstDayOfMonth.getDay(); // 0 (Sun) to 6 (Sat)
         const daysInMonth = lastDayOfMonth.getDate();
-        
+
         const days = [];
-        
+
         // Previous Month Padding
         const prevMonthLastDate = new Date(year, month, 0).getDate();
         for (let i = startDayOfWeek - 1; i >= 0; i--) {
             const date = new Date(year, month - 1, prevMonthLastDate - i);
-            days.push({ 
-                dateObj: date, 
-                dateStr: date.toLocaleDateString('en-CA'), 
-                day: date.getDate(), 
-                isCurrentMonth: false 
+            days.push({
+                dateObj: date,
+                dateStr: date.toLocaleDateString('en-CA'),
+                day: date.getDate(),
+                isCurrentMonth: false
             });
         }
-        
+
         // Current Month
         for (let i = 1; i <= daysInMonth; i++) {
             const date = new Date(year, month, i);
-            days.push({ 
-                dateObj: date, 
-                dateStr: date.toLocaleDateString('en-CA'), 
-                day: i, 
-                isCurrentMonth: true 
+            days.push({
+                dateObj: date,
+                dateStr: date.toLocaleDateString('en-CA'),
+                day: i,
+                isCurrentMonth: true
             });
         }
-        
+
         // Next Month Padding (Fill to 42 days - 6 weeks)
         const remainingCells = 42 - days.length;
         for (let i = 1; i <= remainingCells; i++) {
             const date = new Date(year, month + 1, i);
-            days.push({ 
-                dateObj: date, 
-                dateStr: date.toLocaleDateString('en-CA'), 
-                day: i, 
-                isCurrentMonth: false 
+            days.push({
+                dateObj: date,
+                dateStr: date.toLocaleDateString('en-CA'),
+                day: i,
+                isCurrentMonth: false
             });
         }
-        
+
         return days;
     }, [year, month]);
 
@@ -851,7 +834,7 @@ const ScheduleManager = (): React.ReactElement => {
     const handleAddChecklist = async (type: ChecklistType, content: string) => {
         const user = auth.currentUser;
         if (!user) return;
-        
+
         const newItem: Omit<ChecklistItem, 'id'> = {
             type,
             content,
@@ -919,10 +902,9 @@ const ScheduleManager = (): React.ReactElement => {
                     {/* Left Group */}
                     <div className="flex items-center justify-between w-full sm:w-auto sm:justify-start gap-2 sm:gap-4">
                         <h2 className="text-lg sm:text-xl font-bold text-base-content flex items-center gap-2 shrink-0">
-                            <span className="text-2xl">🗓️</span> 
                             <span className="hidden xs:inline sm:inline">일정 관리</span>
                         </h2>
-                        
+
                         <div className="flex items-center gap-2">
                             <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-base-300 shadow-sm">
                                 <button onClick={handlePrevMonth} className="p-1 hover:bg-base-100 rounded-full text-base-content-secondary">
@@ -941,7 +923,7 @@ const ScheduleManager = (): React.ReactElement => {
 
                     {/* Right Group (Buttons) */}
                     <div className="flex gap-2 w-full sm:w-auto justify-end">
-                        <button 
+                        <button
                             onClick={() => setIsSettingsModalOpen(true)}
                             className="bg-white text-base-content-secondary px-3 py-2 rounded-lg font-bold border border-base-300 shadow-sm hover:bg-base-50 transition-all text-xs flex items-center justify-center gap-1 shrink-0"
                             title="일정 설정"
@@ -950,7 +932,7 @@ const ScheduleManager = (): React.ReactElement => {
                                 <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
                             </svg>
                         </button>
-                        <button 
+                        <button
                             onClick={() => setIsRecurringModalOpen(true)}
                             className="bg-white text-primary border border-primary/20 px-3 py-2 rounded-lg font-bold shadow-sm hover:bg-primary/5 transition-all text-xs flex items-center justify-center gap-1.5 shrink-0"
                             title="고정 일정(반복) 추가"
@@ -960,7 +942,7 @@ const ScheduleManager = (): React.ReactElement => {
                             </svg>
                             <span className="hidden sm:inline">고정 일정</span>
                         </button>
-                        <button 
+                        <button
                             onClick={() => openEventModal(getTodayString())}
                             className="bg-primary text-primary-content px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-primary-focus transition-all text-sm flex items-center justify-center gap-2 flex-1 sm:flex-none"
                         >
@@ -972,17 +954,17 @@ const ScheduleManager = (): React.ReactElement => {
                     </div>
                 </div>
 
-                {/* Calendar Grid - iPad Fix: Added pb-20 */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col bg-base-100 min-h-[300px] pb-20">
-                    {/* Day Headers */}
-                    <div className="grid grid-cols-7 border-b border-base-300 bg-base-50/50 sticky top-0 z-10">
+                {/* Calendar Grid - Responsive fill */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col bg-base-100 min-h-0 relative">
+                    {/* Day Headers - z-40 to stay above day cells (which can have z-20) */}
+                    <div className="grid grid-cols-7 border-b border-base-300 bg-base-50/90 backdrop-blur-sm sticky top-0 z-[40]">
                         {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
                             <div key={d} className={`p-2 text-center text-xs font-bold ${i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : 'text-base-content-secondary'}`}>
                                 {d}
                             </div>
                         ))}
                     </div>
-                    
+
                     {/* Days Grid */}
                     <div className="grid grid-cols-7 auto-rows-fr flex-1 bg-base-200 gap-px border-b border-base-300">
                         {calendarDays.map((cell, i) => {
@@ -992,15 +974,15 @@ const ScheduleManager = (): React.ReactElement => {
                             const dayOfWeek = cell.dateObj.getDay();
                             const isSunday = dayOfWeek === 0;
                             const isSaturday = dayOfWeek === 6;
-                            
+
                             dayEvents.sort((a, b) => {
                                 if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
                                 return (a.time || '').localeCompare(b.time || '');
                             });
 
                             return (
-                                <div 
-                                    key={i} 
+                                <div
+                                    key={i}
                                     onClick={() => openEventModal(dateStr)}
                                     className={`bg-white p-2 min-h-[80px] hover:bg-base-50 transition-colors cursor-pointer group flex flex-col gap-1 relative
                                         ${!cell.isCurrentMonth ? 'bg-base-50/50' : ''}
@@ -1008,16 +990,16 @@ const ScheduleManager = (): React.ReactElement => {
                                     `}
                                 >
                                     <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full mb-1
-                                        ${isToday 
-                                            ? 'bg-primary text-primary-content font-extrabold' 
+                                        ${isToday
+                                            ? 'bg-primary text-primary-content font-extrabold'
                                             : `${!cell.isCurrentMonth ? 'opacity-40' : ''} ${isSunday ? 'text-red-500' : isSaturday ? 'text-blue-500' : 'text-base-content-secondary'}`
                                         }
                                     `}>
                                         {cell.day}
                                     </span>
-                                    
+
                                     {dayEvents.map(event => (
-                                        <div 
+                                        <div
                                             key={event.id}
                                             onClick={(e) => { e.stopPropagation(); openEventModal(dateStr, event); }}
                                             className={`px-2 py-0.5 rounded text-[10px] border flex flex-col gap-0.5 shadow-sm transition-all hover:scale-[1.02] hover:shadow-md
@@ -1028,7 +1010,7 @@ const ScheduleManager = (): React.ReactElement => {
                                         >
                                             <div className="flex flex-col gap-0.5">
                                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                                     {settings.viewOptions.showTime && event.time && (
+                                                    {settings.viewOptions.showTime && event.time && (
                                                         <span className="text-[10px] font-extrabold opacity-90 shrink-0 bg-white/40 px-1 rounded">
                                                             {event.time}
                                                         </span>
@@ -1059,11 +1041,11 @@ const ScheduleManager = (): React.ReactElement => {
             <div className="md:flex-[3] flex flex-col gap-4 md:overflow-y-auto custom-scrollbar md:h-full h-auto pb-32 md:pb-0 min-h-0 shrink-0">
                 {/* Daily */}
                 <div className="shrink-0">
-                    <ChecklistSection 
-                        title="일일 체크리스트" 
-                        type="daily" 
-                        items={checklists.filter(c => c.type === 'daily')} 
-                        onAdd={handleAddChecklist} 
+                    <ChecklistSection
+                        title="일일 체크리스트"
+                        type="daily"
+                        items={checklists.filter(c => c.type === 'daily')}
+                        onAdd={handleAddChecklist}
                         onToggle={handleToggleChecklist}
                         onDelete={handleDeleteChecklist}
                         colorTheme={{
@@ -1077,11 +1059,11 @@ const ScheduleManager = (): React.ReactElement => {
                 </div>
                 {/* Weekly */}
                 <div className="shrink-0">
-                    <ChecklistSection 
-                        title="주간 실천계획" 
-                        type="weekly" 
-                        items={checklists.filter(c => c.type === 'weekly')} 
-                        onAdd={handleAddChecklist} 
+                    <ChecklistSection
+                        title="주간 실천계획"
+                        type="weekly"
+                        items={checklists.filter(c => c.type === 'weekly')}
+                        onAdd={handleAddChecklist}
                         onToggle={handleToggleChecklist}
                         onDelete={handleDeleteChecklist}
                         colorTheme={{
@@ -1095,11 +1077,11 @@ const ScheduleManager = (): React.ReactElement => {
                 </div>
                 {/* Monthly */}
                 <div className="shrink-0">
-                    <ChecklistSection 
-                        title="월간 실천계획" 
-                        type="monthly" 
-                        items={checklists.filter(c => c.type === 'monthly')} 
-                        onAdd={handleAddChecklist} 
+                    <ChecklistSection
+                        title="월간 실천계획"
+                        type="monthly"
+                        items={checklists.filter(c => c.type === 'monthly')}
+                        onAdd={handleAddChecklist}
                         onToggle={handleToggleChecklist}
                         onDelete={handleDeleteChecklist}
                         colorTheme={{
@@ -1117,8 +1099,8 @@ const ScheduleManager = (): React.ReactElement => {
             {isEventModalOpen && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setIsEventModalOpen(false)}>
                     {/* ... (Existing Modal Content) ... */}
-                    <div 
-                        className="bg-white rounded-xl shadow-2xl w-full max-w-lg border border-base-300" 
+                    <div
+                        className="bg-white rounded-xl shadow-2xl w-full max-w-lg border border-base-300"
                         onClick={e => e.stopPropagation()}
                         onKeyDown={handleEventModalKeyDown}
                     >
@@ -1138,19 +1120,19 @@ const ScheduleManager = (): React.ReactElement => {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-bold text-base-content-secondary mb-1.5">날짜</label>
-                                        <input 
-                                            type="date" 
+                                        <input
+                                            type="date"
                                             value={formData.date}
-                                            onChange={(e) => setFormData({...formData, date: e.target.value})}
+                                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                                             className="w-full p-2.5 bg-white border border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm text-base-content shadow-sm"
                                         />
                                     </div>
                                     <div>
                                         <label className="block text-xs font-bold text-base-content-secondary mb-1.5">시간</label>
-                                        <input 
-                                            type="time" 
+                                        <input
+                                            type="time"
                                             value={formData.time}
-                                            onChange={(e) => setFormData({...formData, time: e.target.value})}
+                                            onChange={(e) => setFormData({ ...formData, time: e.target.value })}
                                             className="w-full p-2.5 bg-white border border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm text-base-content shadow-sm"
                                         />
                                     </div>
@@ -1162,10 +1144,10 @@ const ScheduleManager = (): React.ReactElement => {
                                         {settings.categories.map(cat => (
                                             <button
                                                 key={cat.id}
-                                                onClick={() => setFormData({...formData, category: cat.label})}
+                                                onClick={() => setFormData({ ...formData, category: cat.label })}
                                                 className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-all
-                                                    ${formData.category === cat.label 
-                                                        ? `${cat.colorClass} ring-2 ring-offset-1 ring-current shadow-sm` 
+                                                    ${formData.category === cat.label
+                                                        ? `${cat.colorClass} ring-2 ring-offset-1 ring-current shadow-sm`
                                                         : 'bg-white border-base-300 text-base-content-secondary hover:bg-base-50'
                                                     }
                                                 `}
@@ -1179,8 +1161,8 @@ const ScheduleManager = (): React.ReactElement => {
                                 <div>
                                     <label className="block text-xs font-bold text-base-content-secondary mb-1.5">할 일 (내용)</label>
                                     <div className="flex items-center gap-3">
-                                        <button 
-                                            onClick={() => setFormData({...formData, isCompleted: !formData.isCompleted})}
+                                        <button
+                                            onClick={() => setFormData({ ...formData, isCompleted: !formData.isCompleted })}
                                             className={`w-10 h-10 rounded-lg border flex items-center justify-center transition-colors shrink-0
                                                 ${formData.isCompleted ? 'bg-primary border-primary text-primary-content' : 'bg-white border-base-300 hover:border-primary'}
                                             `}
@@ -1192,10 +1174,10 @@ const ScheduleManager = (): React.ReactElement => {
                                                 </svg>
                                             )}
                                         </button>
-                                        <input 
-                                            type="text" 
+                                        <input
+                                            type="text"
                                             value={formData.title}
-                                            onChange={(e) => setFormData({...formData, title: e.target.value})}
+                                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                             placeholder="일정 내용을 입력하세요"
                                             className="flex-1 p-2.5 bg-white border border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm font-bold text-base-content shadow-sm placeholder-base-300/70"
                                         />
@@ -1204,10 +1186,10 @@ const ScheduleManager = (): React.ReactElement => {
 
                                 <div>
                                     <label className="block text-xs font-bold text-base-content-secondary mb-1.5">장소</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         value={formData.location}
-                                        onChange={(e) => setFormData({...formData, location: e.target.value})}
+                                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                                         placeholder="장소 (선택)"
                                         className="w-full p-2.5 bg-white border border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm text-base-content shadow-sm placeholder-base-300/70"
                                     />
@@ -1215,9 +1197,9 @@ const ScheduleManager = (): React.ReactElement => {
 
                                 <div>
                                     <label className="block text-xs font-bold text-base-content-secondary mb-1.5">메모</label>
-                                    <textarea 
+                                    <textarea
                                         value={formData.memo}
-                                        onChange={(e) => setFormData({...formData, memo: e.target.value})}
+                                        onChange={(e) => setFormData({ ...formData, memo: e.target.value })}
                                         placeholder="자세한 내용을 입력하세요..."
                                         rows={3}
                                         className="w-full p-2.5 bg-white border border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm text-base-content shadow-sm resize-none placeholder-base-300/70"
@@ -1227,7 +1209,7 @@ const ScheduleManager = (): React.ReactElement => {
 
                             <div className="flex justify-between items-center mt-8 pt-4 border-t border-base-200">
                                 {editingId ? (
-                                    <button 
+                                    <button
                                         onClick={handleDeleteEvent}
                                         className="text-red-500 hover:text-red-700 text-sm font-bold flex items-center gap-1 px-2 py-1 hover:bg-red-50 rounded-md transition-colors"
                                     >
@@ -1238,13 +1220,13 @@ const ScheduleManager = (): React.ReactElement => {
                                     </button>
                                 ) : <div></div>}
                                 <div className="flex gap-2">
-                                    <button 
+                                    <button
                                         onClick={() => setIsEventModalOpen(false)}
                                         className="px-4 py-2 bg-base-200 text-base-content-secondary font-bold rounded-lg hover:bg-base-300 transition-colors text-sm"
                                     >
                                         취소
                                     </button>
-                                    <button 
+                                    <button
                                         onClick={handleSaveEvent}
                                         className="px-6 py-2 bg-primary text-primary-content font-bold rounded-lg shadow-md hover:bg-primary-focus hover:shadow-lg transition-all text-sm"
                                     >
@@ -1258,18 +1240,18 @@ const ScheduleManager = (): React.ReactElement => {
             )}
 
             {isSettingsModalOpen && (
-                <SettingsModal 
-                    currentSettings={settings} 
-                    onSave={handleSaveSettings} 
-                    onClose={() => setIsSettingsModalOpen(false)} 
+                <SettingsModal
+                    currentSettings={settings}
+                    onSave={handleSaveSettings}
+                    onClose={() => setIsSettingsModalOpen(false)}
                 />
             )}
 
             {isRecurringModalOpen && (
-                <RecurringEventModal 
-                    categories={settings.categories} 
-                    onSave={handleSaveRecurringEvents} 
-                    onClose={() => setIsRecurringModalOpen(false)} 
+                <RecurringEventModal
+                    categories={settings.categories}
+                    onSave={handleSaveRecurringEvents}
+                    onClose={() => setIsRecurringModalOpen(false)}
                 />
             )}
         </div>

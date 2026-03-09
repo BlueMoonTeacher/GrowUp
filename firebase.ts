@@ -1,8 +1,8 @@
 
-// Since the Firebase SDKs are loaded via <script> tags in index.html,
-// the `firebase` object is available on the global window scope.
-// We declare it here to satisfy TypeScript's type checker.
-declare const firebase: any;
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/auth';
+import 'firebase/compat/firestore';
+import 'firebase/compat/analytics';
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -24,6 +24,7 @@ firebase.analytics();
 
 export const auth = firebase.auth();
 export const firestore = firebase.firestore();
+export default firebase;
 
 // Explicitly set persistence to LOCAL to ensure mobile PWA sessions survive redirects
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)

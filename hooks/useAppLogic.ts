@@ -3,9 +3,25 @@ import { auth, firestore } from '../firebase';
 import { Student, BehaviorRecord } from '../types';
 import { extractStudentInfoFromFile } from '../services/geminiService';
 import { useModal } from '../context/ModalContext';
-import { AppSettings } from '../App';
+import { AppSettings, SchoolYearEntry } from '../App';
 
 export type View = 'dashboard' | 'form' | 'notice';
+
+/** 설정에서 현재 활성 학년도·학반 정보 반환 (entries 우선, 없으면 legacy schoolYear/grade/class) */
+function getActiveYearFromSettings(s: AppSettings): { schoolYear: string; grade: string; class: string } | null {
+  const entries = s.schoolYearEntries;
+  if (entries?.length) {
+    const active = entries.find(e => e.active && e.schoolYear && e.grade && e.class);
+    if (active) return { schoolYear: active.schoolYear, grade: active.grade, class: active.class };
+    return null;
+  }
+  if (s.schoolYear && s.grade && s.class) return { schoolYear: s.schoolYear, grade: s.grade, class: s.class };
+  return null;
+}
+
+function hasValidActiveEntry(s: AppSettings): boolean {
+  return getActiveYearFromSettings(s) !== null;
+}
 
 const TEMPLATE_FILE_URL = 'https://firebasestorage.googleapis.com/v0/b/forstudents-e1117.firebasestorage.app/o/forms%2FSample%20form.hwp?alt=media&token=7b598032-bd15-45a8-8106-03129ff7a90b';
 
@@ -25,8 +41,11 @@ export const useAppLogic = () => {
 
     const [settings, setSettings] = useState<AppSettings>({
         school: '', grade: '', class: '', schoolYear: '',
-        geminiApiKey: '', geminiModel: 'gemini-2.5-flash'
+        geminiApiKey: '', geminiModel: 'gemini-2.5-pro'
     });
+
+    /** 이 계정에 저장된 모든 학년도·학반 (학생 데이터 기준). 설정 모달에서 목록 표시용 */
+    const [schoolYearsFromData, setSchoolYearsFromData] = useState<{ schoolYear: string; grade: string; class: string }[]>([]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -72,19 +91,26 @@ export const useAppLogic = () => {
                         newSettings = {
                             ...loadedSettings,
                             schoolYear: loadedSettings.schoolYear || defaultSchoolYear,
-                            geminiModel: loadedSettings.geminiModel || 'gemini-2.5-flash'
+                            geminiModel: loadedSettings.geminiModel || 'gemini-2.5-pro'
                         };
+                        const active = getActiveYearFromSettings(newSettings);
+                        if (active) {
+                            newSettings.schoolYear = active.schoolYear;
+                            newSettings.grade = active.grade;
+                            newSettings.class = active.class;
+                        }
                     } else {
-                        newSettings = { school: '', grade: '', class: '', schoolYear: defaultSchoolYear, geminiApiKey: '', geminiModel: 'gemini-2.5-flash' };
+                        newSettings = { school: '', grade: '', class: '', schoolYear: defaultSchoolYear, geminiApiKey: '', geminiModel: 'gemini-2.5-pro' };
                     }
 
                     setSettings(newSettings);
 
-                    if (newSettings.school && newSettings.grade && newSettings.class) {
-                        setIsInitialSetupRequired(false);
-                    } else {
+                    const needSetup = !newSettings.school || !newSettings.atptOfcdcScCode || !newSettings.sdSchulCode || !hasValidActiveEntry(newSettings);
+                    if (needSetup) {
                         setIsInitialSetupRequired(true);
                         setIsSettingsModalOpen(true);
+                    } else {
+                        setIsInitialSetupRequired(false);
                     }
 
                     await fetchStudents(currentUser.uid, newSettings.schoolYear || defaultSchoolYear);
@@ -96,13 +122,46 @@ export const useAppLogic = () => {
                 }
             } else {
                 setStudents([]);
-                setSettings({ school: '', grade: '', class: '', schoolYear: '', geminiApiKey: '', geminiModel: 'gemini-2.5-flash' });
+                setSettings({ school: '', grade: '', class: '', schoolYear: '', geminiApiKey: '', geminiModel: 'gemini-2.5-pro' });
                 setIsInitialSetupRequired(false);
                 setIsDataLoading(false);
             }
         });
         return unsubscribe;
     }, []);
+
+    /** 설정 모달이 열릴 때, 이 계정의 학생 데이터에서 존재하는 모든 학년도·학반 목록 조회 */
+    useEffect(() => {
+        if (!isSettingsModalOpen || !user) {
+            setSchoolYearsFromData([]);
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            try {
+                const snapshot = await firestore.collection('users').doc(user.uid).collection('students').get();
+                const all = snapshot.docs.map((doc: any) => doc.data()) as Student[];
+                const seen = new Set<string>();
+                const list: { schoolYear: string; grade: string; class: string }[] = [];
+                for (const s of all) {
+                    const year = s.schoolYear || '';
+                    const grade = s.grade || '';
+                    const class_ = s.class || '';
+                    if (!year || !grade || !class_) continue;
+                    const key = `${year}-${grade}-${class_}`;
+                    if (seen.has(key)) continue;
+                    seen.add(key);
+                    list.push({ schoolYear: year, grade, class: class_ });
+                }
+                list.sort((a, b) => a.schoolYear.localeCompare(b.schoolYear));
+                if (!cancelled) setSchoolYearsFromData(list);
+            } catch (e) {
+                console.error('Failed to load school years from data:', e);
+                if (!cancelled) setSchoolYearsFromData([]);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [isSettingsModalOpen, user?.uid]);
 
     const handleAddStudent = async (newStudent: Omit<Student, 'id'>) => {
         if (!user) {
@@ -336,6 +395,13 @@ export const useAppLogic = () => {
             return;
         }
         try {
+            const active = getActiveYearFromSettings(newSettings);
+            if (active) {
+                newSettings.schoolYear = active.schoolYear;
+                newSettings.grade = active.grade;
+                newSettings.class = active.class;
+            }
+
             const settingsRef = firestore.collection('users').doc(user.uid).collection('appData').doc('settings');
             await settingsRef.set(newSettings, { merge: true });
 
@@ -393,6 +459,7 @@ export const useAppLogic = () => {
         handleAddBehaviorRecord,
         handleDeleteBehaviorRecord,
         handleSaveSettings,
-        handleLogout
+        handleLogout,
+        schoolYearsFromData
     };
 };

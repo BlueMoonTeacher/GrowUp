@@ -3,25 +3,26 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Student, BehaviorRecord, AnalysisResult, Assessment } from "../types";
 
 // Default Configuration
-const DEFAULT_API_KEY = 'AIzaSyARWeBR0qcjWtRKUa9uM8ysN7S4BGKGi6E';
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+const DEFAULT_MODEL = 'gemini-2.5-pro';
 
 // Helper to initialize AI client with dynamic key
 function getAiClient(apiKey?: string) {
-    const keyToUse = apiKey && apiKey.trim() !== '' ? apiKey : DEFAULT_API_KEY;
-    return new GoogleGenAI({ apiKey: keyToUse });
+    if (!apiKey || apiKey.trim() === '') {
+        throw new Error("Gemini API 키가 설정되지 않았습니다. 로그인 후 우측 상단의 '설정' 메뉴에서 직접 발급받은 API 키를 입력해주세요.");
+    }
+    return new GoogleGenAI({ apiKey });
 }
 
 // Helper to convert a File object to a GoogleGenAI.Part object.
 async function fileToGenerativePart(file: File) {
-  const base64EncodedDataPromise = new Promise<string>((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-    reader.readAsDataURL(file);
-  });
-  return {
-    inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
-  };
+    const base64EncodedDataPromise = new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsDataURL(file);
+    });
+    return {
+        inlineData: { data: await base64EncodedDataPromise, mimeType: file.type },
+    };
 }
 
 const studentSchema = {
@@ -118,14 +119,14 @@ const multiStudentSchema = {
 const analysisSchema = {
     type: Type.OBJECT,
     properties: {
-        keywords: { 
-            type: Type.ARRAY, 
+        keywords: {
+            type: Type.ARRAY,
             items: { type: Type.STRING },
-            description: "행동 특성을 나타내는 핵심 키워드 3~5개 (예: #책임감, #배려심)" 
+            description: "행동 특성을 나타내는 핵심 키워드 3~5개 (예: #책임감, #배려심)"
         },
-        summary: { 
-            type: Type.STRING, 
-            description: "1학기 내용과 수시 기록을 아우르는 1년 전체의 행동 발달 흐름 요약 (3~5문장)" 
+        summary: {
+            type: Type.STRING,
+            description: "1학기 내용과 수시 기록을 아우르는 1년 전체의 행동 발달 흐름 요약 (3~5문장)"
         },
         trends: {
             type: Type.ARRAY,
@@ -140,11 +141,11 @@ const analysisSchema = {
                 }
             }
         },
-        report: { 
-            type: Type.STRING, 
-            description: "학교생활기록부 '행동특성 및 종합의견' 최종 기재용 완성글. 5~7문장 내외로 작성." 
+        report: {
+            type: Type.STRING,
+            description: "학교생활기록부 '행동특성 및 종합의견' 최종 기재용 완성글. 5~7문장 내외로 작성."
         },
-        advice: { 
+        advice: {
             type: Type.ARRAY,
             description: "교사를 위한 맞춤형 지도 조언 목록 (내년 담임에게 전달 가능한 팁 포함)",
             items: {
@@ -184,45 +185,45 @@ const assessmentPlanSchema = {
 
 
 export async function extractStudentInfoFromFile(file: File, apiKey?: string, model?: string): Promise<Omit<Student, 'id'>[]> {
-  const ai = getAiClient(apiKey);
-  const selectedModel = model || DEFAULT_MODEL;
+    const ai = getAiClient(apiKey);
+    const selectedModel = model || DEFAULT_MODEL;
 
-  const imagePart = await fileToGenerativePart(file);
+    const imagePart = await fileToGenerativePart(file);
 
-  const prompt = `다음은 여러 학생의 정보가 포함될 수 있는 학생 기초 조사서 파일입니다. 파일에 있는 모든 학생의 정보를 추출하여, 제공된 스키마에 따라 각 학생을 객체로 하는 JSON 배열을 생성해주세요. 모든 필드를 채우려고 노력하되, 이미지에 정보가 없는 필드는 빈 문자열("")이나 적절한 기본값(예: 불리언의 경우 false, 빈 배열 [])으로 남겨두세요. 날짜 형식은 YYYY-MM-DD를 따라야 합니다.`;
-  
-  try {
-    const response = await ai.models.generateContent({
-      model: selectedModel,
-      contents: { parts: [imagePart, { text: prompt }] },
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: multiStudentSchema,
-      },
-    });
+    const prompt = `다음은 여러 학생의 정보가 포함될 수 있는 학생 기초 조사서 파일입니다. 파일에 있는 모든 학생의 정보를 추출하여, 제공된 스키마에 따라 각 학생을 객체로 하는 JSON 배열을 생성해주세요. 모든 필드를 채우려고 노력하되, 이미지에 정보가 없는 필드는 빈 문자열("")이나 적절한 기본값(예: 불리언의 경우 false, 빈 배열 [])으로 남겨두세요. 날짜 형식은 YYYY-MM-DD를 따라야 합니다.`;
 
-    const text = response.text;
-    const studentData = JSON.parse(text);
-    
-    // Ensure the result is always an array
-    if (Array.isArray(studentData)) {
-      return studentData as Omit<Student, 'id'>[];
-    } else if (typeof studentData === 'object' && studentData !== null) {
-      // If Gemini returns a single object instead of an array with one object
-      return [studentData as Omit<Student, 'id'>];
+    try {
+        const response = await ai.models.generateContent({
+            model: selectedModel,
+            contents: { parts: [imagePart, { text: prompt }] },
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: multiStudentSchema,
+            },
+        });
+
+        const text = response.text;
+        const studentData = JSON.parse(text);
+
+        // Ensure the result is always an array
+        if (Array.isArray(studentData)) {
+            return studentData as Omit<Student, 'id'>[];
+        } else if (typeof studentData === 'object' && studentData !== null) {
+            // If Gemini returns a single object instead of an array with one object
+            return [studentData as Omit<Student, 'id'>];
+        }
+
+        return []; // Return empty array if parsing fails or result is not an object/array
+    } catch (error) {
+        console.error("Error processing file with Gemini API:", error);
+        throw error;
     }
-    
-    return []; // Return empty array if parsing fails or result is not an object/array
-  } catch (error) {
-    console.error("Error processing file with Gemini API:", error);
-    throw error; 
-  }
 }
 
 export async function analyzeBehaviorRecords(
-    studentName: string, 
-    records: BehaviorRecord[], 
-    semester1Opinion?: string, 
+    studentName: string,
+    records: BehaviorRecord[],
+    semester1Opinion?: string,
     apiKey?: string,
     model?: string
 ): Promise<AnalysisResult> {
@@ -278,10 +279,10 @@ export async function analyzeBehaviorRecords(
 
         const text = response.text;
         if (!text) {
-             throw new Error("AI 응답이 비어있습니다.");
+            throw new Error("AI 응답이 비어있습니다.");
         }
         const result = JSON.parse(text) as AnalysisResult;
-        
+
         // Add timestamp if missing
         return {
             ...result,
@@ -296,7 +297,7 @@ export async function analyzeBehaviorRecords(
 export async function extractAssessmentPlanFromFile(file: File, apiKey?: string, model?: string): Promise<Omit<Assessment, 'id' | 'createdAt' | 'schoolYear'>[]> {
     const ai = getAiClient(apiKey);
     const selectedModel = model || DEFAULT_MODEL;
-    
+
     const imagePart = await fileToGenerativePart(file);
 
     const prompt = `

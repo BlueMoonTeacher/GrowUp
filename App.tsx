@@ -9,11 +9,20 @@ import GrowthLogo from './components/GrowthLogo';
 import NoticeBoard from './components/NoticeBoard';
 import { useAppLogic, View } from './hooks/useAppLogic';
 
+export interface SchoolYearEntry {
+  schoolYear: string;
+  grade: string;
+  class: string;
+  active: boolean;
+}
+
 export interface AppSettings {
   school: string;
   grade: string;
   class: string;
   schoolYear?: string;
+  /** 학년도·학반 목록. 활성(active: true)인 한 개만 실제 운영에 사용됨. */
+  schoolYearEntries?: SchoolYearEntry[];
   atptOfcdcScCode?: string;
   sdSchulCode?: string;
   geminiApiKey?: string;
@@ -48,7 +57,8 @@ const App = (): React.ReactElement => {
     handleAddBehaviorRecord,
     handleDeleteBehaviorRecord,
     handleSaveSettings,
-    handleLogout
+    handleLogout,
+    schoolYearsFromData
   } = useAppLogic();
 
   useEffect(() => {
@@ -101,6 +111,7 @@ const App = (): React.ReactElement => {
       {isSettingsModalOpen && (
         <SettingsModal
           currentSettings={settings}
+          schoolYearsFromData={schoolYearsFromData}
           onSave={handleSaveSettings}
           onClose={() => setIsSettingsModalOpen(false)}
           isInitialSetup={isInitialSetupRequired}

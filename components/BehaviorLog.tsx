@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { BehaviorRecord, Student, AnalysisResult } from '../types';
 import AnalysisModal from './AnalysisModal';
 import { useModal } from '../context/ModalContext';
@@ -100,6 +101,23 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
       await onUpdateStudent(updatedStudent);
   };
 
+  const handleDownloadXls = () => {
+      const records = [...(student.behaviorRecords || [])].sort((a, b) => {
+          if (a.date !== b.date) return a.date.localeCompare(b.date);
+          return a.timestamp - b.timestamp;
+      });
+      const rows = [['날짜별', '시간별', '내용'] as const].concat(
+          records.map((r) => [r.date, r.period, r.content])
+      );
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      const sheetName = '행동발달누가기록';
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      const fileName = `${student.name?.hangul || '학생'}_행동발달누가기록.xlsx`;
+      XLSX.writeFile(wb, fileName);
+      showToast('엑셀 파일이 다운로드되었습니다.');
+  };
+
   // --- Edit Handlers ---
   const handleStartEdit = (record: BehaviorRecord) => {
       setEditingId(record.id);
@@ -189,7 +207,6 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
             className="w-full px-4 py-2.5 flex items-center justify-between text-sm font-bold text-base-content hover:bg-base-100 transition-colors"
           >
               <div className="flex items-center gap-2">
-                  <span className="text-primary">📑</span>
                   <span>1학기 행동 특성 및 종합의견</span>
                   {student.semester1Opinion && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">작성됨</span>}
               </div>
@@ -221,10 +238,24 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
 
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
-          <span className="text-2xl" role="img" aria-label="memo">📝</span>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+            <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
+          </svg>
           <h2 className="text-lg font-bold text-base-content">행동 발달 기록</h2>
         </div>
         <div className="flex items-center space-x-2">
+            <button
+                type="button"
+                onClick={handleDownloadXls}
+                className="flex items-center gap-1.5 bg-base-200 hover:bg-base-300 text-base-content border border-base-300 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                title="행동 발달 누가기록 엑셀 다운로드"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-600" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+                내려받기
+            </button>
             <span className="text-xs text-base-content-secondary bg-base-200 px-2.5 py-1 rounded-full font-semibold border border-base-300/70">
                 {filterMonth === 'all' ? '총' : formatMonthLabel(filterMonth)} {filteredRecords.length}건
             </span>
@@ -233,10 +264,6 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
                 className="flex items-center space-x-1 bg-gradient-to-r from-primary to-primary-focus text-primary-content px-3 py-1.5 rounded-full text-xs font-bold shadow-md hover:shadow-lg transition-all active:scale-95"
                 title="1학기 의견과 수시 기록을 바탕으로 최종 리포트 작성"
             >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fillRule="evenodd" d="M5 2a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H3a1 1 0 010-2h1V3a1 1 0 011-1zm0 5a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0v-1H3a1 1 0 010-2h1v-1a1 1 0 011-1zm5-5a1 1 0 011 1v1h1a1 1 0 010 2H6v1a1 1 0 01-2 0V6H9a1 1 0 010-2h1V3a1 1 0 011-1z" clipRule="evenodd" />
-                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                </svg>
                 <span>AI 종합 분석</span>
             </button>
         </div>
@@ -372,7 +399,7 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
                                         e.stopPropagation();
                                         handleStartEdit(record);
                                     }}
-                                    className="text-base-300 hover:text-primary hover:bg-primary/10 p-1 rounded transition-colors"
+                                    className="text-green-600 hover:text-primary hover:bg-primary/15 p-1 rounded transition-colors"
                                     title="수정"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -387,11 +414,11 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
                                             onDeleteRecord(record.id);
                                         }
                                     }}
-                                    className="text-base-300 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors"
+                                    className="text-red-500 hover:text-red-600 hover:bg-red-50 p-1 rounded transition-colors"
                                     title="삭제"
                                 >
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
                                     </svg>
                                 </button>
                             </div>
@@ -405,7 +432,6 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
           ))
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-base-content-secondary space-y-2 opacity-60">
-            <span className="text-4xl">🍃</span>
             <p className="text-sm font-medium">
                 {filterMonth === 'all' ? '아직 기록된 내용이 없습니다.' : '해당 월의 기록이 없습니다.'}
             </p>

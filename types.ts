@@ -132,6 +132,16 @@ export interface ChecklistItem {
   createdAt: number;
 }
 
+/** 체크 완료 시 기록 (기간별 1건, 복원 시 삭제) */
+export interface ChecklistCompletion {
+  id: string;
+  checklistItemId: string;
+  type: ChecklistType;
+  periodKey: string;
+  contentSnapshot: string;
+  completedAt: number;
+}
+
 export interface Student {
   id: string;
   schoolYear?: string; // 학년도 (e.g. "2025")

@@ -1,8 +1,16 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { firestore, auth } from '../firebase';
-import { ScheduleEvent, ScheduleSettings, ScheduleCategoryDef, ChecklistItem, ChecklistType } from '../types';
+import { ScheduleEvent, ScheduleSettings, ScheduleCategoryDef, ChecklistItem, ChecklistType, ChecklistCompletion } from '../types';
 import { useModal } from '../context/ModalContext';
+import {
+    formatDateKoreanFull,
+    formatWeekRangeKorean,
+    formatMonthKorean,
+    getPeriodKeyForType,
+    formatCompletionPeriodKorean,
+    typeLabelKo,
+} from '../utils/checklistPeriod';
 
 // Default categories if user hasn't set any
 const DEFAULT_CATEGORIES: ScheduleCategoryDef[] = [
@@ -42,10 +50,11 @@ const getTodayString = () => new Date().toLocaleDateString('en-CA');
 // --- Checklist Component ---
 interface ChecklistSectionProps {
     title: string;
+    dateLabel: string;
     type: ChecklistType;
     items: ChecklistItem[];
     onAdd: (type: ChecklistType, content: string) => void;
-    onToggle: (id: string, currentStatus: boolean) => void;
+    onComplete: (item: ChecklistItem) => void;
     onDelete: (id: string) => void;
     colorTheme: {
         bg: string;
@@ -58,7 +67,7 @@ interface ChecklistSectionProps {
 
 const ITEMS_PREVIEW_COUNT = 4;
 
-const ChecklistSection = ({ title, type, items, onAdd, onToggle, onDelete, colorTheme }: ChecklistSectionProps) => {
+const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, onDelete, colorTheme }: ChecklistSectionProps) => {
     const [newItemText, setNewItemText] = useState('');
     const [isExpanded, setIsExpanded] = useState(false);
 
@@ -80,10 +89,13 @@ const ChecklistSection = ({ title, type, items, onAdd, onToggle, onDelete, color
     return (
         <div className={`${colorTheme.bg} rounded-xl p-4 border ${colorTheme.border} shadow-sm flex flex-col transition-all duration-300`}>
             {/* Header with Expand/Collapse Toggle */}
-            <div className="flex items-center justify-between mb-3 shrink-0 h-8">
-                <div className="flex items-center gap-2">
-                    <span className="text-lg">{colorTheme.icon}</span>
-                    <h3 className={`font-bold ${colorTheme.title}`}>{title}</h3>
+            <div className="flex items-center justify-between mb-3 shrink-0 min-h-8">
+                <div className="flex flex-col gap-0.5 min-w-0">
+                    <div className="flex items-center gap-2">
+                        <span className="text-lg shrink-0">{colorTheme.icon}</span>
+                        <h3 className={`font-bold ${colorTheme.title} leading-tight`}>{title}</h3>
+                    </div>
+                    <p className="text-[11px] sm:text-xs font-semibold text-gray-600 pl-7 leading-tight">{dateLabel}</p>
                 </div>
 
                 {/* Expand/Collapse Toggle - Only show if items exceed preview count */}
@@ -119,19 +131,12 @@ const ChecklistSection = ({ title, type, items, onAdd, onToggle, onDelete, color
                             className="group flex items-start gap-2 text-sm animate-[fadeIn_0.2s_ease-out] p-1.5 rounded-lg hover:bg-white/80 hover:shadow-sm transition-all"
                         >
                             <button
-                                onClick={() => onToggle(item.id, item.isChecked)}
-                                className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${item.isChecked
-                                    ? `bg-${colorTheme.accent} border-${colorTheme.accent} text-white`
-                                    : `bg-white border-gray-300 hover:border-${colorTheme.accent}`
-                                    }`}
-                            >
-                                {item.isChecked && (
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                    </svg>
-                                )}
-                            </button>
-                            <span className={`flex-1 break-words leading-tight transition-all ${item.isChecked ? 'text-gray-400 line-through' : 'text-gray-700 font-medium'}`}>
+                                type="button"
+                                title="완료하면 목록에서 숨겨지고 완료 기록에 남습니다"
+                                onClick={() => onComplete(item)}
+                                className="mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 bg-white border-gray-300 hover:border-red-400 hover:bg-red-50"
+                            />
+                            <span className="flex-1 break-words leading-tight text-gray-700 font-medium">
                                 {item.content}
                             </span>
                             <button
@@ -579,6 +584,8 @@ const ScheduleManager = (): React.ReactElement => {
 
     // Checklist State
     const [checklists, setChecklists] = useState<ChecklistItem[]>([]);
+    const [checklistCompletions, setChecklistCompletions] = useState<ChecklistCompletion[]>([]);
+    const [scheduleMainView, setScheduleMainView] = useState<'calendar' | 'checklistLog'>('calendar');
 
     // UI States
     const [isEventModalOpen, setIsEventModalOpen] = useState(false);
@@ -621,8 +628,47 @@ const ScheduleManager = (): React.ReactElement => {
 
                 // Fetch Checklists
                 const checkSnapshot = await firestore.collection('users').doc(user.uid).collection('checklists').orderBy('createdAt', 'asc').get();
-                const fetchedChecklists = checkSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChecklistItem));
+                let fetchedChecklists = checkSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChecklistItem));
+
+                const legacyChecked = fetchedChecklists.filter(i => i.isChecked);
+                if (legacyChecked.length > 0) {
+                    const batch = firestore.batch();
+                    legacyChecked.forEach(item => {
+                        batch.update(
+                            firestore.collection('users').doc(user.uid).collection('checklists').doc(item.id),
+                            { isChecked: false }
+                        );
+                    });
+                    await batch.commit();
+                    fetchedChecklists = fetchedChecklists.map(i => ({ ...i, isChecked: false }));
+                }
                 setChecklists(fetchedChecklists);
+
+                const compSnap = await firestore
+                    .collection('users')
+                    .doc(user.uid)
+                    .collection('checklistCompletions')
+                    .orderBy('completedAt', 'desc')
+                    .limit(500)
+                    .get();
+                const fetchedComp: ChecklistCompletion[] = compSnap.docs.map(doc => {
+                    const d = doc.data();
+                    let at = Date.now();
+                    if (d.completedAt && typeof d.completedAt.toMillis === 'function') {
+                        at = d.completedAt.toMillis();
+                    } else if (typeof d.completedAt === 'number') {
+                        at = d.completedAt;
+                    }
+                    return {
+                        id: doc.id,
+                        checklistItemId: d.checklistItemId,
+                        type: d.type as ChecklistType,
+                        periodKey: d.periodKey,
+                        contentSnapshot: d.contentSnapshot || '',
+                        completedAt: at,
+                    };
+                });
+                setChecklistCompletions(fetchedComp);
 
             } catch (error) {
                 console.error("Error fetching schedule data:", error);
@@ -850,21 +896,55 @@ const ScheduleManager = (): React.ReactElement => {
         }
     };
 
-    const handleToggleChecklist = async (id: string, currentStatus: boolean) => {
+    const isChecklistDoneThisPeriod = (item: ChecklistItem) => {
+        const pk = getPeriodKeyForType(item.type);
+        return checklistCompletions.some(c => c.checklistItemId === item.id && c.periodKey === pk);
+    };
+
+    const handleCompleteChecklist = async (item: ChecklistItem) => {
         const user = auth.currentUser;
         if (!user) return;
+        const periodKey = getPeriodKeyForType(item.type);
+        const docId = `${item.id}_${periodKey}`;
+        if (checklistCompletions.some(c => c.id === docId)) return;
 
-        // Optimistic UI update
-        setChecklists(prev => prev.map(item => item.id === id ? { ...item, isChecked: !currentStatus } : item));
+        const newRow: ChecklistCompletion = {
+            id: docId,
+            checklistItemId: item.id,
+            type: item.type,
+            periodKey,
+            contentSnapshot: item.content,
+            completedAt: Date.now(),
+        };
+        setChecklistCompletions(prev => [newRow, ...prev]);
 
         try {
-            await firestore.collection('users').doc(user.uid).collection('checklists').doc(id).update({
-                isChecked: !currentStatus
+            await firestore.collection('users').doc(user.uid).collection('checklistCompletions').doc(docId).set({
+                checklistItemId: item.id,
+                type: item.type,
+                periodKey,
+                contentSnapshot: item.content,
+                completedAt: Date.now(),
             });
         } catch (error) {
-            console.error("Error toggling checklist:", error);
-            // Revert on error
-            setChecklists(prev => prev.map(item => item.id === id ? { ...item, isChecked: currentStatus } : item));
+            console.error('Error saving checklist completion:', error);
+            setChecklistCompletions(prev => prev.filter(c => c.id !== docId));
+            await showAlert('완료 기록 저장에 실패했습니다. 네트워크를 확인해 주세요.');
+        }
+    };
+
+    const handleRestoreChecklistCompletion = async (row: ChecklistCompletion) => {
+        const user = auth.currentUser;
+        if (!user) return;
+        const ok = await showConfirm('이 항목을 다시 할 일 목록에 되돌릴까요?');
+        if (!ok) return;
+        setChecklistCompletions(prev => prev.filter(c => c.id !== row.id));
+        try {
+            await firestore.collection('users').doc(user.uid).collection('checklistCompletions').doc(row.id).delete();
+        } catch (error) {
+            console.error('Error restoring checklist:', error);
+            setChecklistCompletions(prev => [row, ...prev].sort((a, b) => b.completedAt - a.completedAt));
+            await showAlert('복원에 실패했습니다.');
         }
     };
 
@@ -933,6 +1013,27 @@ const ScheduleManager = (): React.ReactElement => {
                             </svg>
                         </button>
                         <button
+                            type="button"
+                            onClick={() => setScheduleMainView('calendar')}
+                            className={`px-3 py-2 rounded-lg font-bold border shadow-sm transition-all text-xs shrink-0 ${scheduleMainView === 'calendar'
+                                ? 'bg-primary text-primary-content border-primary'
+                                : 'bg-white text-base-content-secondary border-base-300 hover:bg-base-50'
+                                }`}
+                        >
+                            캘린더
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setScheduleMainView('checklistLog')}
+                            className={`px-3 py-2 rounded-lg font-bold border shadow-sm transition-all text-xs shrink-0 ${scheduleMainView === 'checklistLog'
+                                ? 'bg-primary text-primary-content border-primary'
+                                : 'bg-white text-base-content-secondary border-base-300 hover:bg-base-50'
+                                }`}
+                            title="체크리스트 완료 기록 · 복원"
+                        >
+                            완료 기록
+                        </button>
+                        <button
                             onClick={() => setIsRecurringModalOpen(true)}
                             className="bg-white text-primary border border-primary/20 px-3 py-2 rounded-lg font-bold shadow-sm hover:bg-primary/5 transition-all text-xs flex items-center justify-center gap-1.5 shrink-0"
                             title="고정 일정(반복) 추가"
@@ -954,8 +1055,66 @@ const ScheduleManager = (): React.ReactElement => {
                     </div>
                 </div>
 
-                {/* Calendar Grid - Responsive fill */}
+                {/* Calendar Grid OR 체크리스트 완료 기록 */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col bg-base-100 min-h-0 relative">
+                    {scheduleMainView === 'checklistLog' ? (
+                        <div className="p-3 sm:p-4 flex flex-col gap-3 min-h-0 flex-1">
+                            <p className="text-sm text-base-content-secondary">
+                                체크한 항목은 <strong className="text-base-content">완료 시각</strong>과 함께 저장됩니다. 잘못 체크했으면 <strong>복원</strong>으로 다시 할 일 목록에 올릴 수 있어요.
+                            </p>
+                            <div className="overflow-x-auto rounded-xl border border-base-300 bg-white shadow-sm flex-1 min-h-[200px]">
+                                <table className="w-full text-sm border-collapse min-w-[640px]">
+                                    <thead className="bg-base-200 sticky top-0 z-10 border-b border-base-300">
+                                        <tr className="text-xs sm:text-sm">
+                                            <th className="whitespace-nowrap text-left p-2 font-bold">완료 시각</th>
+                                            <th className="whitespace-nowrap text-left p-2 font-bold">기간</th>
+                                            <th className="whitespace-nowrap text-left p-2 font-bold">구분</th>
+                                            <th className="text-left p-2 font-bold">내용</th>
+                                            <th className="w-20 text-center p-2 font-bold">복원</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {checklistCompletions.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={5} className="text-center text-base-content-secondary py-12 italic p-4">
+                                                    아직 완료 기록이 없습니다. 체크리스트에서 항목을 체크해 보세요.
+                                                </td>
+                                            </tr>
+                                        ) : (
+                                            checklistCompletions.map(row => (
+                                                <tr key={row.id} className="hover:bg-base-50 border-b border-base-200">
+                                                    <td className="whitespace-nowrap text-xs sm:text-sm align-top p-2">
+                                                        {new Date(row.completedAt).toLocaleString('ko-KR', {
+                                                            year: 'numeric',
+                                                            month: 'long',
+                                                            day: 'numeric',
+                                                            hour: '2-digit',
+                                                            minute: '2-digit',
+                                                        })}
+                                                    </td>
+                                                    <td className="text-xs sm:text-sm align-top min-w-[8rem] p-2">
+                                                        {formatCompletionPeriodKorean(row.type, row.periodKey)}
+                                                    </td>
+                                                    <td className="whitespace-nowrap align-top p-2">{typeLabelKo(row.type)}</td>
+                                                    <td className="align-top break-words max-w-[12rem] sm:max-w-md p-2">{row.contentSnapshot}</td>
+                                                    <td className="text-center align-top p-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRestoreChecklistCompletion(row)}
+                                                            className="text-primary font-bold text-xs px-2 py-1 rounded-lg hover:bg-primary/10"
+                                                        >
+                                                            복원
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
                     {/* Day Headers - z-40 to stay above day cells (which can have z-20) */}
                     <div className="grid grid-cols-7 border-b border-base-300 bg-base-50/90 backdrop-blur-sm sticky top-0 z-[40]">
                         {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
@@ -1034,6 +1193,8 @@ const ScheduleManager = (): React.ReactElement => {
                             );
                         })}
                     </div>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -1043,10 +1204,11 @@ const ScheduleManager = (): React.ReactElement => {
                 <div className="shrink-0">
                     <ChecklistSection
                         title="일일 체크리스트"
+                        dateLabel={formatDateKoreanFull(new Date())}
                         type="daily"
-                        items={checklists.filter(c => c.type === 'daily')}
+                        items={checklists.filter(c => c.type === 'daily' && !isChecklistDoneThisPeriod(c))}
                         onAdd={handleAddChecklist}
-                        onToggle={handleToggleChecklist}
+                        onComplete={handleCompleteChecklist}
                         onDelete={handleDeleteChecklist}
                         colorTheme={{
                             bg: 'bg-red-50',
@@ -1061,10 +1223,11 @@ const ScheduleManager = (): React.ReactElement => {
                 <div className="shrink-0">
                     <ChecklistSection
                         title="주간 실천계획"
+                        dateLabel={formatWeekRangeKorean(new Date())}
                         type="weekly"
-                        items={checklists.filter(c => c.type === 'weekly')}
+                        items={checklists.filter(c => c.type === 'weekly' && !isChecklistDoneThisPeriod(c))}
                         onAdd={handleAddChecklist}
-                        onToggle={handleToggleChecklist}
+                        onComplete={handleCompleteChecklist}
                         onDelete={handleDeleteChecklist}
                         colorTheme={{
                             bg: 'bg-fuchsia-50',
@@ -1079,10 +1242,11 @@ const ScheduleManager = (): React.ReactElement => {
                 <div className="shrink-0">
                     <ChecklistSection
                         title="월간 실천계획"
+                        dateLabel={formatMonthKorean(new Date())}
                         type="monthly"
-                        items={checklists.filter(c => c.type === 'monthly')}
+                        items={checklists.filter(c => c.type === 'monthly' && !isChecklistDoneThisPeriod(c))}
                         onAdd={handleAddChecklist}
-                        onToggle={handleToggleChecklist}
+                        onComplete={handleCompleteChecklist}
                         onDelete={handleDeleteChecklist}
                         colorTheme={{
                             bg: 'bg-amber-50',

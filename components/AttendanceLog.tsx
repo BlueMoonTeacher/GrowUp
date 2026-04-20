@@ -317,8 +317,8 @@ const AttendanceLog = ({ student, onUpdateStudent, settings }: AttendanceLogProp
                 </div>
             </div>
 
-            {/* Calendar */}
-            <div className="bg-base-100 p-5 rounded-xl shadow-lg border border-base-300/60 flex-1 flex flex-col min-h-[300px]">
+            {/* Calendar — max-lg: 단일열에서 flex-1·auto-rows-fr가 높이를 압축해 격자가 카드 밖으로 탈출함 → 내용 높이로 확장 */}
+            <div className="flex flex-col rounded-xl border border-base-300/60 bg-base-100 p-5 shadow-lg max-lg:shrink-0 max-lg:flex-none lg:min-h-[300px] lg:flex-1">
                 <div className="flex justify-between items-center mb-6">
                     <button onClick={handlePrevMonth} className="p-2 hover:bg-base-200 rounded-full transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-base-content-secondary" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
@@ -337,7 +337,7 @@ const AttendanceLog = ({ student, onUpdateStudent, settings }: AttendanceLogProp
                     ))}
                 </div>
                 
-                <div className="grid grid-cols-7 gap-2 flex-1 auto-rows-fr select-none">
+                <div className="grid grid-cols-7 gap-2 select-none max-lg:flex-none lg:flex-1 lg:auto-rows-fr">
                     {days.map((day, i) => {
                         if (!day) return <div key={`empty-${i}`} className="bg-transparent"></div>;
                         

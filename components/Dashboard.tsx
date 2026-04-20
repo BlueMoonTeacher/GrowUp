@@ -25,6 +25,9 @@ interface DashboardProps {
 
 const ICONS = ['🌱', '🌳', '🌸', '☀️', '💧', '🍃', '🌷', '🍁', '🍄', '🌻'];
 
+/** 급식·탭 옆 날짜 표시용 (로컬 기준 YYYY-MM-DD) */
+const getDashboardTodayString = () => new Date().toLocaleDateString('en-CA');
+
 type SortOrder = 'number' | 'name';
 type DashboardTab = 'growth' | 'attendance' | 'planner' | 'schedule' | 'evaluation';
 type AttendanceViewMode = 'individual' | 'overview';
@@ -207,10 +210,10 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
     const isStudentSelectableTab = activeTab === 'growth' || (activeTab === 'attendance' && attendanceViewMode === 'individual');
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 lg:gap-6 h-full min-h-0">
+        <div className="grid h-full min-h-0 min-w-0 grid-cols-1 gap-3 md:grid-cols-12 md:gap-3 lg:gap-4">
             {/* Left Column: Student List - Hidden in Overview/Planner Mode AND Hidden on Mobile (replaced by dropdown) */}
             {!isFullWidthMode && (
-                <div className="hidden md:flex md:col-span-3 lg:col-span-2 h-full overflow-hidden flex-col gap-4 min-h-0">
+                <div className="hidden min-h-0 min-w-0 flex-col gap-3 overflow-hidden md:flex md:col-span-3 lg:col-span-2">
                     <StudentList
                         students={sortedStudents}
                         selectedStudentId={selectedStudent?.id || null}
@@ -222,7 +225,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
             )}
 
             {/* Right Column Area */}
-            <div className={`${isFullWidthMode ? 'md:col-span-12' : 'md:col-span-9 lg:col-span-10'} h-full flex flex-col overflow-hidden min-h-0`}>
+            <div className={`${isFullWidthMode ? 'md:col-span-12' : 'md:col-span-9 lg:col-span-10'} flex h-full min-h-0 min-w-0 flex-col overflow-hidden`}>
 
                 {/* Mobile Sticky Header Area (Tabs + Student Selector) */}
                 <div className="flex flex-col gap-2 mb-2 shrink-0 sticky top-0 z-20 bg-neutral/95 backdrop-blur-sm pt-1 pb-1 md:static md:bg-transparent md:p-0">
@@ -238,9 +241,9 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                         </div>
                     )}
 
-                    {/* 2. Tab Navigation */}
-                    <div className="flex justify-between items-center w-full md:w-auto px-1">
-                        <div className="flex w-full md:w-fit items-center space-x-1 bg-white/70 p-1 rounded-xl border border-base-300/50 backdrop-blur-sm shadow-sm">
+                    {/* 2. Tab Navigation (+ 생활기록 탭일 때만 태블릿 이상에서 급식 기준일) */}
+                    <div className="flex w-full flex-wrap items-center justify-between gap-2 px-1 md:flex-nowrap md:gap-3">
+                        <div className="flex min-w-0 w-full flex-1 items-center space-x-1 rounded-xl border border-base-300/50 bg-white/70 p-1 shadow-sm backdrop-blur-sm md:w-fit md:flex-initial">
                             <button
                                 onClick={() => setActiveTab('growth')}
                                 className={`flex-1 md:flex-none justify-center px-0 md:px-5 py-2 rounded-lg text-[11px] md:text-sm font-bold transition-all duration-200 flex items-center gap-2 ${activeTab === 'growth'
@@ -288,9 +291,20 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                             </button>
                         </div>
 
+                        <div className="flex shrink-0 items-center gap-2 md:ml-auto">
+                        {activeTab === 'growth' && (
+                            <time
+                                dateTime={getDashboardTodayString()}
+                                className="hidden rounded-full border border-primary/20 bg-primary px-3 py-1.5 text-sm font-bold text-primary-content shadow-sm md:inline-block whitespace-nowrap"
+                                title="오늘 급식 기준일"
+                            >
+                                {getDashboardTodayString()}
+                            </time>
+                        )}
+
                         {/* Attendance Sub-Tabs */}
                         {activeTab === 'attendance' && (
-                            <div className="flex items-center space-x-1 bg-white/70 p-1 rounded-lg border border-base-300/50 ml-2 shadow-sm shrink-0">
+                            <div className="flex shrink-0 items-center space-x-1 rounded-lg border border-base-300/50 bg-white/70 p-1 shadow-sm">
                                 <button
                                     onClick={() => setAttendanceViewMode('individual')}
                                     className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap ${attendanceViewMode === 'individual'
@@ -311,18 +325,18 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                                 </button>
                             </div>
                         )}
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-hidden min-h-0 relative">
-                    {/* Growth Record View */}
-                    {/* iPad Fix: Added pb-20 md:pb-24 to ensure content isn't cut off on tablets */}
+                <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden md:overflow-hidden">
+                    {/* Growth Record View — 모바일: 한 스크롤로 전체 높이 확장 / md+: 기존 고정+내부 스크롤 */}
                     {activeTab === 'growth' && (
-                        <div className="grid h-full grid-cols-1 gap-2 overflow-y-auto pb-20 min-h-0 md:grid-cols-2 md:gap-4 md:overflow-hidden md:pb-0 lg:grid-cols-[5fr_5fr_3fr] lg:gap-6">
+                        <div className="grid min-h-0 min-w-0 auto-rows-auto grid-cols-1 gap-2 pb-20 max-md:h-auto max-md:overflow-visible md:h-full md:grid-cols-2 md:gap-3 md:overflow-hidden md:pb-0 lg:grid-cols-[5fr_5fr_3fr] lg:gap-3">
                             {/* Column 1: Detail (+ Lunch on Tablet) */}
-                            <div className="flex flex-col gap-4 h-full overflow-hidden order-1 min-h-0">
+                            <div className="order-1 flex min-h-0 min-w-0 flex-col gap-3 max-md:h-auto max-md:overflow-visible md:h-full md:overflow-hidden md:gap-4">
                                 {/* Student Detail */}
-                                <div className={`flex-1 overflow-y-auto custom-scrollbar md:pb-24 ${selectedStudent ? '' : 'flex flex-col'}`}>
+                                <div className={`max-md:flex-none max-md:overflow-visible md:flex-1 md:overflow-y-auto custom-scrollbar md:pb-24 ${selectedStudent ? '' : 'flex flex-col'}`}>
                                     {selectedStudent ? (
                                         <>
                                             <div className="md:hidden mb-2">
@@ -355,13 +369,13 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                                 </div>
 
                                 {/* Lunch Menu (Visible here only on Tablet 'md' but hidden on 'lg') */}
-                                <div className="hidden md:block lg:hidden h-[300px] shrink-0">
+                                <div className="hidden h-[300px] min-h-0 min-w-0 shrink-0 overflow-hidden rounded-xl md:block lg:hidden">
                                     <LunchMenu settings={settings} />
                                 </div>
                             </div>
 
                             {/* Column 2: Behavior Log (Center on PC, Right on Tablet) */}
-                            <div className="h-[500px] md:h-full overflow-hidden order-2 min-h-0">
+                            <div className="order-2 min-h-0 min-w-0 max-md:h-auto max-md:overflow-visible md:h-full md:overflow-hidden">
                                 {selectedStudent ? (
                                     <BehaviorLog
                                         student={selectedStudent}
@@ -378,7 +392,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
 
                             {/* Column 3: Lunch (Far Right on PC, Moved to Col 1 on Tablet) */}
                             {/* Mobile: h-auto min-h-[400px] to allow scrolling with the page */}
-                            <div className="h-auto min-h-[400px] lg:h-full overflow-visible lg:overflow-hidden order-3 md:hidden lg:block min-h-0">
+                            <div className="order-3 min-h-0 min-w-0 shrink-0 max-md:h-auto max-md:overflow-visible rounded-xl md:hidden md:overflow-hidden lg:block lg:h-full">
                                 <LunchMenu settings={settings} />
                             </div>
                         </div>

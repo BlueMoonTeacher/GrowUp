@@ -169,50 +169,47 @@ const LunchMenu = ({ settings }: LunchMenuProps): React.ReactElement => {
     const selectedMenuItems = colorizeMealItems(cleanMenuItems(selectedMeal?.DDISH_NM), true);
 
     return (
-        <div className="bg-base-100 rounded-xl shadow-lg border border-base-300/60 h-full flex flex-col">
-            {/* Header Merged: 오늘의 식단 + Date */}
-            <div className="flex shrink-0 flex-col gap-2 border-b border-base-300/60 bg-white p-3 min-w-0 sm:flex-row sm:items-center sm:justify-between sm:p-4">
-                <h2 className="flex min-w-0 items-center gap-2 text-lg font-extrabold text-primary sm:text-xl whitespace-nowrap">
-                    <span className="shrink-0 text-2xl" aria-hidden>🍱</span>
-                    <span className="truncate">오늘의 식단</span>
+        <div className="flex h-auto min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-base-300/60 bg-base-100 shadow-lg max-md:overflow-visible md:h-full md:overflow-hidden">
+            {/* 급식 기준일은 상단 탭 줄(생활기록) 오른쪽에서 표시 — 카드에서는 제목만 */}
+            <div className="shrink-0 border-b border-base-300/60 bg-white p-3 sm:p-4">
+                <h2 className="flex items-center gap-2 text-base font-extrabold leading-tight text-primary sm:text-lg">
+                    <span className="shrink-0 text-xl sm:text-2xl" aria-hidden>🍱</span>
+                    <span className="min-w-0 [word-break:keep-all]">오늘의 식단</span>
                 </h2>
-                <span className="shrink-0 self-start whitespace-nowrap rounded-full bg-primary px-3 py-1.5 text-center text-sm font-bold text-primary-content shadow-sm sm:self-auto">
-                    {getTodayString()}
-                </span>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar pb-24 sm:pb-8 md:pb-6">
+            <div className="max-md:flex-none max-md:overflow-visible max-md:pb-4 min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-24 custom-scrollbar sm:pb-8 md:pb-6">
                 {/* Today's Lunch Section */}
-                <div className="p-4 sm:p-5 border-b border-base-300/60 bg-white">
+                <div className="min-w-0 border-b border-base-300/60 bg-white p-3 sm:p-5">
                     {isTodayLoading ? <LoadingSpinner /> : !todayMeal ? (
                         <NoDataMessage emoji="" message="급식 정보가 없습니다." />
                     ) : (
-                        <div className="space-y-4">
-                            <div className="bg-secondary/20 flex flex-col items-center justify-center gap-1 p-3 rounded-xl border border-secondary/30">
-                                <span className="text-xs font-bold text-secondary-content/70">총 칼로리</span>
-                                <span className="text-2xl font-black text-secondary-content">{todayMeal.CAL_INFO}</span>
+                        <div className="space-y-3">
+                            <div className="rounded-xl border border-emerald-400/70 bg-emerald-100 p-1 shadow-sm ring-1 ring-emerald-300/50">
+                                <div className="flex flex-col items-center justify-center gap-0.5 rounded-lg border border-emerald-500/40 bg-emerald-200/90 px-3 py-2 leading-none">
+                                    <span className="text-[11px] font-bold leading-none text-emerald-900">총 칼로리</span>
+                                    <span className="text-xl font-black leading-none tracking-tight text-emerald-950 sm:text-2xl">{todayMeal.CAL_INFO}</span>
+                                </div>
                             </div>
-                            <div className="-mx-1 min-w-0 overflow-x-auto py-1 custom-scrollbar">
-                                <div className="flex w-max min-w-full flex-nowrap justify-center gap-2 px-1">
+                            <div className="flex min-w-0 flex-wrap justify-center gap-2 py-1">
                                 {todayMenuItems.map((item, i) => (
-                                    <span key={i} className={`shrink-0 whitespace-nowrap rounded-lg border-2 px-3 py-1.5 text-sm font-bold shadow-sm ${item.classes}`}>
+                                    <span key={i} className={`shrink-0 whitespace-nowrap rounded-lg border-2 px-2.5 py-1.5 text-center text-xs font-bold shadow-sm sm:px-3 sm:text-sm ${item.classes}`}>
                                         {item.name}
                                     </span>
                                 ))}
-                                </div>
                             </div>
-                            <div className="space-y-1 pt-2 text-xs text-base-content-secondary">
-                                <p className="mb-2 text-center font-bold text-base-content/80">영양 정보 상세</p>
-                                <div className="grid min-w-0 grid-cols-1 gap-2 rounded-lg border border-base-200 bg-base-50 p-3 sm:grid-cols-2 lg:grid-cols-2">
+                            <div className="space-y-1 pt-1 text-xs text-base-content-secondary">
+                                <p className="mb-1 text-center text-xs font-bold leading-tight text-base-content/80">영양 정보 상세</p>
+                                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 rounded-lg border border-base-200 bg-base-50 px-2.5 py-2 text-[11px] leading-tight sm:gap-y-px sm:px-3 sm:py-2.5 sm:text-xs">
                                     {nutritionItems.map(item => {
                                         const isHighlighted = HIGHLIGHT_NUTRIENTS.has(item.label);
                                         return (
                                             <div
                                                 key={item.label}
-                                                className={`flex min-w-0 flex-col gap-0.5 rounded-md border border-base-200/80 bg-white/80 px-2 py-1.5 sm:border-0 sm:bg-white/60 ${isHighlighted ? 'font-bold' : ''}`}
+                                                className={`flex min-w-0 items-baseline justify-between gap-1.5 leading-tight ${isHighlighted ? 'font-bold' : ''}`}
                                             >
-                                                <span className={`text-[11px] leading-snug opacity-80 [word-break:keep-all] sm:text-xs ${isHighlighted ? 'text-primary' : ''}`}>{item.label}</span>
-                                                <span className={`text-sm font-semibold tabular-nums sm:text-sm ${isHighlighted ? 'text-primary' : ''}`}>{item.value}</span>
+                                                <span className={`min-w-0 shrink text-left opacity-80 [word-break:keep-all] ${isHighlighted ? 'text-primary' : ''}`}>{item.label}</span>
+                                                <span className={`shrink-0 whitespace-nowrap tabular-nums ${isHighlighted ? 'text-primary' : ''}`}>{item.value}</span>
                                             </div>
                                         )
                                     })}
@@ -223,13 +220,13 @@ const LunchMenu = ({ settings }: LunchMenuProps): React.ReactElement => {
                 </div>
 
                 {/* Other Day's Lunch Section */}
-                <div className="p-4 bg-base-50/50">
-                    <h3 className="font-semibold text-base-content-secondary text-sm mb-3 flex items-center gap-2 opacity-80">
+                <div className="bg-base-50/50 p-3 max-md:pb-2 md:p-4">
+                    <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-base-content-secondary opacity-80 md:mb-3">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                         다른 날짜 급식 보기
                     </h3>
 
-                    <div className="flex items-center gap-1 mb-4 opacity-80 hover:opacity-100 transition-opacity">
+                    <div className="mb-2 flex items-center gap-1 opacity-80 transition-opacity hover:opacity-100 max-md:mb-2 md:mb-4">
                         <button onClick={() => setSelectedDate(prev => adjustDate(prev, -1))} className="p-2 rounded-md hover:bg-base-200 transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                         </button>
@@ -247,14 +244,12 @@ const LunchMenu = ({ settings }: LunchMenuProps): React.ReactElement => {
                     {isSelectedLoading ? <LoadingSpinner /> : !selectedMeal ? (
                         <NoDataMessage emoji="" message="선택한 날짜의 급식 정보가 없습니다." />
                     ) : (
-                        <div className="-mx-1 min-w-0 overflow-x-auto custom-scrollbar">
-                            <div className="flex w-max min-w-full flex-nowrap justify-center gap-1.5 px-1">
+                        <div className="flex min-w-0 flex-wrap justify-center gap-1.5">
                             {selectedMenuItems.map((item, index) => (
-                                <span key={index} className={`shrink-0 whitespace-nowrap rounded-md border px-2.5 py-1.5 text-center text-xs font-semibold ${item.classes}`}>
+                                <span key={index} className={`shrink-0 whitespace-nowrap rounded-md border px-2 py-1.5 text-center text-xs font-semibold ${item.classes}`}>
                                     {item.name}
                                 </span>
                             ))}
-                            </div>
                         </div>
                     )}
                 </div>

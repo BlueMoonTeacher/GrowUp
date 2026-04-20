@@ -199,9 +199,9 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
   const inputClass = "w-full p-2 text-sm border border-base-300 bg-base-200 rounded-md focus:ring-primary focus:border-primary shadow-sm focus:bg-base-100 transition-colors text-base-content";
 
   return (
-    <div className="bg-base-100 rounded-xl shadow-lg border border-base-300/60 p-4 h-full flex flex-col relative">
-      {/* 1st Semester Opinion Section (Accordion) */}
-      <div className="mb-4 border border-base-300 rounded-lg overflow-hidden bg-base-50/50">
+    <div className="relative flex max-md:h-auto max-md:overflow-visible flex-col overflow-hidden rounded-xl border border-base-300/60 bg-base-100 p-4 max-md:min-h-0 md:h-full">
+      {/* 1st Semester Opinion — PC·태블릿만 (모바일에서는 숨김) */}
+      <div className="mb-4 hidden border border-base-300 rounded-lg bg-base-50/50 overflow-hidden md:block">
           <button 
             onClick={() => setIsSem1Open(!isSem1Open)}
             className="w-full px-4 py-2.5 flex items-center justify-between text-sm font-bold text-base-content hover:bg-base-100 transition-colors"
@@ -236,35 +236,34 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
           )}
       </div>
 
-      {/* 모바일: 제목 / 액션 2줄 + 버튼은 줄바꿈 없음. md+: 한 줄 */}
-      <div className="mb-4 flex flex-col gap-2 min-w-0 md:flex-row md:items-center md:justify-between md:gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 shrink-0 text-green-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+      {/* 모바일: 한 줄(제목·건수·AI), 다운로드 없음 / md+: 기존(다운로드 포함) */}
+      <div className="mb-4 flex min-w-0 flex-row items-center justify-between gap-2 md:gap-3 lg:justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 md:flex-initial md:gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 shrink-0 text-green-600 md:h-6 md:w-6" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
             <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
             <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
           </svg>
-          <h2 className="whitespace-nowrap text-base font-bold text-base-content sm:text-lg">행동 발달 기록</h2>
+          <h2 className="min-w-0 max-md:truncate text-sm font-bold text-base-content md:text-base md:whitespace-nowrap lg:text-lg">행동 발달 기록</h2>
         </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 md:flex-nowrap md:justify-end md:shrink-0">
+        <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
             <button
                 type="button"
                 onClick={handleDownloadXls}
-                className="flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-base-300 bg-base-200 px-2.5 py-1.5 text-xs font-bold text-base-content transition-colors hover:bg-base-300 sm:px-2.5"
+                className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-base-300 bg-base-200 text-base-content transition-colors hover:bg-base-300 md:flex"
                 title="행동 발달 누가기록 엑셀 다운로드"
                 aria-label="행동 발달 누가기록 엑셀 다운로드"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0 text-green-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
                     <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
-                <span className="hidden whitespace-nowrap sm:inline">내려받기</span>
             </button>
-            <span className="shrink-0 whitespace-nowrap rounded-full border border-base-300/70 bg-base-200 px-2.5 py-1 text-xs font-semibold text-base-content-secondary">
+            <span className="shrink-0 whitespace-nowrap rounded-full border border-base-300/70 bg-base-200 px-2 py-0.5 text-[11px] font-semibold text-base-content-secondary md:px-2.5 md:py-1 md:text-xs">
                 {filterMonth === 'all' ? '총' : formatMonthLabel(filterMonth)} {filteredRecords.length}건
             </span>
             <button
                 type="button"
                 onClick={() => setIsAnalysisModalOpen(true)}
-                className="flex shrink-0 items-center rounded-full bg-gradient-to-r from-primary to-primary-focus px-3 py-1.5 text-xs font-bold text-primary-content shadow-md transition-all hover:shadow-lg active:scale-95 whitespace-nowrap"
+                className="flex shrink-0 items-center rounded-full bg-gradient-to-r from-primary to-primary-focus px-2 py-1 text-[11px] font-bold text-primary-content shadow-md transition-all hover:shadow-lg active:scale-95 whitespace-nowrap md:px-3 md:py-1.5 md:text-xs"
                 title="1학기 의견과 수시 기록을 바탕으로 최종 리포트 작성"
             >
                 <span className="md:hidden">AI 분석</span>
@@ -314,18 +313,20 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
 
       {/* Filter Buttons */}
       {availableMonths.length > 0 && (
-          <div className="flex items-center space-x-2 mb-3 overflow-x-auto custom-scrollbar pb-1">
+          <div className="mb-3 flex flex-wrap items-center gap-2 md:flex-nowrap md:gap-2 md:overflow-x-auto md:pb-1 custom-scrollbar">
             <button
+                type="button"
                 onClick={() => setFilterMonth('all')}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${filterMonth === 'all' ? 'bg-primary text-primary-content border-primary' : 'bg-base-200 text-base-content-secondary border-transparent hover:bg-base-300'}`}
+                className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-colors ${filterMonth === 'all' ? 'border-primary bg-primary text-primary-content' : 'border-transparent bg-base-200 text-base-content-secondary hover:bg-base-300'}`}
             >
                 전체
             </button>
             {availableMonths.map(month => (
                 <button
+                    type="button"
                     key={month}
                     onClick={() => setFilterMonth(month)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${filterMonth === month ? 'bg-primary text-primary-content border-primary' : 'bg-base-200 text-base-content-secondary border-transparent hover:bg-base-300'}`}
+                    className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold whitespace-nowrap transition-colors ${filterMonth === month ? 'border-primary bg-primary text-primary-content' : 'border-transparent bg-base-200 text-base-content-secondary hover:bg-base-300'}`}
                 >
                     {formatMonthLabel(month)}
                 </button>
@@ -333,8 +334,8 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
         </div>
       )}
 
-      {/* Records List */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-3 pb-24">
+      {/* Records List — PC만 카드 내부 스크롤, 모바일은 전체 높이에 펼침 */}
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-2 pb-10 custom-scrollbar max-md:flex-none max-md:overflow-visible md:pb-24">
         {filteredRecords.length > 0 ? (
           filteredRecords.map((record) => (
             <div 

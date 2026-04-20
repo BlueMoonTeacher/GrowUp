@@ -705,8 +705,8 @@ const ClassPlanner = (): React.ReactElement => {
     const isWeekend = currentDayOfWeek === 0 || currentDayOfWeek === 6;
 
     return (
-        <div className="h-full flex flex-col md:flex-row gap-6 overflow-hidden">
-            <div className={`flex-1 overflow-hidden bg-base-100 rounded-xl shadow-lg border border-base-300/60 order-2 md:order-1 transition-all duration-300 min-h-0 ${isMobileCalendarOpen ? 'hidden md:flex flex-col' : 'flex flex-col'}`}>
+        <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto overflow-x-hidden md:flex-row md:gap-6 md:overflow-hidden">
+            <div className={`order-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-base-300/60 bg-base-100 shadow-lg transition-all duration-300 md:order-1 ${isMobileCalendarOpen ? 'hidden md:flex' : 'flex'}`}>
                 <div className="p-4 border-b border-base-300 bg-base-50 flex flex-wrap justify-between items-center shrink-0 gap-2">
 
                     <button
@@ -764,7 +764,7 @@ const ClassPlanner = (): React.ReactElement => {
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-2 sm:p-4 flex flex-col gap-2 bg-base-50/30">
+                <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto bg-base-50/30 p-2 custom-scrollbar sm:gap-3 sm:p-4">
                     {isWeekend && (
                         <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-center shrink-0">
                             <p className="text-orange-800 font-bold text-sm">오늘은 수업이 없는 주말입니다</p>
@@ -778,7 +778,7 @@ const ClassPlanner = (): React.ReactElement => {
                                 <div
                                     key={plan.period}
                                     onClick={() => updatePlan(index, 'disabled', false)}
-                                    className="group flex flex-1 w-full items-center justify-center p-2 rounded-xl border-2 border-dashed border-base-300 bg-base-100/50 hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer min-h-[40px]"
+                                    className="group flex w-full shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-base-300 bg-base-100/50 p-2 transition-all hover:border-primary/50 hover:bg-primary/5 min-h-[44px] cursor-pointer"
                                 >
                                     <div className="flex items-center gap-2 text-base-content-secondary group-hover:text-primary font-bold transition-colors">
                                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -800,7 +800,7 @@ const ClassPlanner = (): React.ReactElement => {
                         return (
                             <div
                                 key={plan.period}
-                                className={`flex flex-col sm:flex-row gap-2 sm:gap-3 p-2 sm:p-3 rounded-xl border shadow-sm hover:shadow-md transition-all group relative flex-1 min-h-[80px]
+                                className={`group relative flex w-full shrink-0 flex-col gap-2 rounded-xl border p-2 shadow-sm transition-all hover:shadow-md sm:flex-row sm:gap-3 sm:p-3
                         ${isSpecialistView ? 'bg-purple-50 border-purple-200 ring-1 ring-purple-100' : 'bg-white border-base-300'}
                     `}
                             >
@@ -825,7 +825,7 @@ const ClassPlanner = (): React.ReactElement => {
                                     {teacherMode === 'sports' && <span className="text-[10px] bg-cyan-600 text-white px-1.5 py-0.5 rounded mt-1 font-bold shadow-sm">스강</span>}
                                 </div>
 
-                                <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                                <div className="grid w-full min-w-0 grid-cols-1 items-start gap-3 sm:flex-1 sm:min-w-0 md:grid-cols-12 md:items-center">
                                     <div className="md:col-span-2 relative">
                                         <label className="block text-xs font-bold text-base-content-secondary mb-1.5">과목</label>
                                         <div className="relative">

@@ -125,7 +125,7 @@ const App = (): React.ReactElement => {
         accept="image/*,application/pdf"
       />
       <header className="bg-base-100 shadow-md z-20 border-b border-base-300/70 shrink-0">
-        <div className="w-full px-2 sm:px-4 lg:px-6">
+        <div className="w-full px-1 sm:px-4 lg:px-6">
           <div className="flex justify-between items-center py-2 sm:py-3">
             <div className="flex items-center space-x-2 sm:space-x-3 truncate">
               <button onClick={() => setView('dashboard')} className="flex items-center space-x-2 sm:space-x-3 focus:outline-none">
@@ -244,7 +244,7 @@ const App = (): React.ReactElement => {
         </div>
       </header>
 
-      <main className="flex-1 w-full px-2 sm:px-4 lg:px-6 py-2 sm:py-4 overflow-hidden min-h-0 transition-all">
+      <main className="flex-1 w-full min-h-0 overflow-hidden px-1 py-2 transition-all sm:px-4 sm:py-4 lg:px-6 pb-16 sm:pb-4">
         {view === 'dashboard' ? (
           <Dashboard
             students={students}
@@ -271,8 +271,10 @@ const App = (): React.ReactElement => {
           </div>
         )}
       </main>
-      <footer className="fixed bottom-4 right-6 text-xs text-base-content-secondary/80 bg-base-100/50 backdrop-blur-sm py-1 px-3 rounded-full z-50 shadow-sm border border-base-300/30">
-        제작자: 푸른달 선생님
+      <footer className="pointer-events-none fixed bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] right-3 z-30 text-[10px] text-base-content-secondary/90 sm:bottom-4 sm:right-6 sm:z-50 sm:text-xs">
+        <span className="pointer-events-auto rounded-full border border-base-300/40 bg-base-100/90 px-2 py-1 shadow-sm backdrop-blur-sm sm:px-3">
+          제작자: 푸른달 선생님
+        </span>
       </footer>
     </div>
   );

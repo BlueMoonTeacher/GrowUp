@@ -171,16 +171,17 @@ const LunchMenu = ({ settings }: LunchMenuProps): React.ReactElement => {
     return (
         <div className="bg-base-100 rounded-xl shadow-lg border border-base-300/60 h-full flex flex-col">
             {/* Header Merged: 오늘의 식단 + Date */}
-            <div className="flex items-center justify-between p-4 border-b border-base-300/60 bg-white shrink-0">
-                <h2 className="text-xl font-extrabold text-primary flex items-center gap-2">
-                    <span className="text-2xl">🍱</span>오늘의 식단
+            <div className="flex shrink-0 flex-col gap-2 border-b border-base-300/60 bg-white p-3 min-w-0 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+                <h2 className="flex min-w-0 items-center gap-2 text-lg font-extrabold text-primary sm:text-xl whitespace-nowrap">
+                    <span className="shrink-0 text-2xl" aria-hidden>🍱</span>
+                    <span className="truncate">오늘의 식단</span>
                 </h2>
-                <span className="text-sm font-bold bg-primary text-primary-content px-3 py-1.5 rounded-full shadow-sm text-center">
+                <span className="shrink-0 self-start whitespace-nowrap rounded-full bg-primary px-3 py-1.5 text-center text-sm font-bold text-primary-content shadow-sm sm:self-auto">
                     {getTodayString()}
                 </span>
             </div>
 
-            <div className="flex-1 overflow-y-auto custom-scrollbar pb-6">
+            <div className="flex-1 overflow-y-auto custom-scrollbar pb-24 sm:pb-8 md:pb-6">
                 {/* Today's Lunch Section */}
                 <div className="p-4 sm:p-5 border-b border-base-300/60 bg-white">
                     {isTodayLoading ? <LoadingSpinner /> : !todayMeal ? (
@@ -191,22 +192,27 @@ const LunchMenu = ({ settings }: LunchMenuProps): React.ReactElement => {
                                 <span className="text-xs font-bold text-secondary-content/70">총 칼로리</span>
                                 <span className="text-2xl font-black text-secondary-content">{todayMeal.CAL_INFO}</span>
                             </div>
-                            <div className="flex flex-wrap gap-2 justify-center py-1">
+                            <div className="-mx-1 min-w-0 overflow-x-auto py-1 custom-scrollbar">
+                                <div className="flex w-max min-w-full flex-nowrap justify-center gap-2 px-1">
                                 {todayMenuItems.map((item, i) => (
-                                    <span key={i} className={`text-sm font-bold px-3 py-1.5 rounded-lg border-2 shadow-sm ${item.classes}`}>
+                                    <span key={i} className={`shrink-0 whitespace-nowrap rounded-lg border-2 px-3 py-1.5 text-sm font-bold shadow-sm ${item.classes}`}>
                                         {item.name}
                                     </span>
                                 ))}
+                                </div>
                             </div>
-                            <div className="text-xs text-base-content-secondary pt-2 space-y-1">
-                                <p className="font-bold mb-2 text-center text-base-content/80">영양 정보 상세</p>
-                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 bg-base-50 p-3 rounded-lg border border-base-200">
+                            <div className="space-y-1 pt-2 text-xs text-base-content-secondary">
+                                <p className="mb-2 text-center font-bold text-base-content/80">영양 정보 상세</p>
+                                <div className="grid min-w-0 grid-cols-1 gap-2 rounded-lg border border-base-200 bg-base-50 p-3 sm:grid-cols-2 lg:grid-cols-2">
                                     {nutritionItems.map(item => {
                                         const isHighlighted = HIGHLIGHT_NUTRIENTS.has(item.label);
                                         return (
-                                            <div key={item.label} className={`flex justify-between ${isHighlighted ? 'font-bold' : ''}`}>
-                                                <span className={`opacity-80 ${isHighlighted ? 'text-primary' : ''}`}>{item.label}</span>
-                                                <span className={isHighlighted ? 'text-primary' : ''}>{item.value}</span>
+                                            <div
+                                                key={item.label}
+                                                className={`flex min-w-0 flex-col gap-0.5 rounded-md border border-base-200/80 bg-white/80 px-2 py-1.5 sm:border-0 sm:bg-white/60 ${isHighlighted ? 'font-bold' : ''}`}
+                                            >
+                                                <span className={`text-[11px] leading-snug opacity-80 [word-break:keep-all] sm:text-xs ${isHighlighted ? 'text-primary' : ''}`}>{item.label}</span>
+                                                <span className={`text-sm font-semibold tabular-nums sm:text-sm ${isHighlighted ? 'text-primary' : ''}`}>{item.value}</span>
                                             </div>
                                         )
                                     })}
@@ -241,12 +247,14 @@ const LunchMenu = ({ settings }: LunchMenuProps): React.ReactElement => {
                     {isSelectedLoading ? <LoadingSpinner /> : !selectedMeal ? (
                         <NoDataMessage emoji="" message="선택한 날짜의 급식 정보가 없습니다." />
                     ) : (
-                        <div className="flex flex-wrap gap-1.5 justify-center">
+                        <div className="-mx-1 min-w-0 overflow-x-auto custom-scrollbar">
+                            <div className="flex w-max min-w-full flex-nowrap justify-center gap-1.5 px-1">
                             {selectedMenuItems.map((item, index) => (
-                                <span key={index} className={`text-xs font-semibold px-2.5 py-1.5 rounded-md border text-center ${item.classes}`}>
+                                <span key={index} className={`shrink-0 whitespace-nowrap rounded-md border px-2.5 py-1.5 text-center text-xs font-semibold ${item.classes}`}>
                                     {item.name}
                                 </span>
                             ))}
+                            </div>
                         </div>
                     )}
                 </div>

@@ -236,35 +236,39 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
           )}
       </div>
 
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center space-x-2">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-green-600 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+      {/* 모바일: 제목 / 액션 2줄 + 버튼은 줄바꿈 없음. md+: 한 줄 */}
+      <div className="mb-4 flex flex-col gap-2 min-w-0 md:flex-row md:items-center md:justify-between md:gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 shrink-0 text-green-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
             <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
             <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
           </svg>
-          <h2 className="text-lg font-bold text-base-content">행동 발달 기록</h2>
+          <h2 className="whitespace-nowrap text-base font-bold text-base-content sm:text-lg">행동 발달 기록</h2>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 md:flex-nowrap md:justify-end md:shrink-0">
             <button
                 type="button"
                 onClick={handleDownloadXls}
-                className="flex items-center gap-1.5 bg-base-200 hover:bg-base-300 text-base-content border border-base-300 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                className="flex shrink-0 items-center justify-center gap-1.5 rounded-lg border border-base-300 bg-base-200 px-2.5 py-1.5 text-xs font-bold text-base-content transition-colors hover:bg-base-300 sm:px-2.5"
                 title="행동 발달 누가기록 엑셀 다운로드"
+                aria-label="행동 발달 누가기록 엑셀 다운로드"
             >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-green-600" viewBox="0 0 20 20" fill="currentColor">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0 text-green-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
                     <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
                 </svg>
-                내려받기
+                <span className="hidden whitespace-nowrap sm:inline">내려받기</span>
             </button>
-            <span className="text-xs text-base-content-secondary bg-base-200 px-2.5 py-1 rounded-full font-semibold border border-base-300/70">
+            <span className="shrink-0 whitespace-nowrap rounded-full border border-base-300/70 bg-base-200 px-2.5 py-1 text-xs font-semibold text-base-content-secondary">
                 {filterMonth === 'all' ? '총' : formatMonthLabel(filterMonth)} {filteredRecords.length}건
             </span>
             <button
+                type="button"
                 onClick={() => setIsAnalysisModalOpen(true)}
-                className="flex items-center space-x-1 bg-gradient-to-r from-primary to-primary-focus text-primary-content px-3 py-1.5 rounded-full text-xs font-bold shadow-md hover:shadow-lg transition-all active:scale-95"
+                className="flex shrink-0 items-center rounded-full bg-gradient-to-r from-primary to-primary-focus px-3 py-1.5 text-xs font-bold text-primary-content shadow-md transition-all hover:shadow-lg active:scale-95 whitespace-nowrap"
                 title="1학기 의견과 수시 기록을 바탕으로 최종 리포트 작성"
             >
-                <span>AI 종합 분석</span>
+                <span className="md:hidden">AI 분석</span>
+                <span className="hidden md:inline">AI 종합 분석</span>
             </button>
         </div>
       </div>

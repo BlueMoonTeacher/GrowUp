@@ -318,7 +318,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                     {/* Growth Record View */}
                     {/* iPad Fix: Added pb-20 md:pb-24 to ensure content isn't cut off on tablets */}
                     {activeTab === 'growth' && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[5fr_5fr_3fr] gap-4 lg:gap-6 h-full overflow-y-auto md:overflow-hidden pb-20 md:pb-0">
+                        <div className="grid h-full grid-cols-1 gap-2 overflow-y-auto pb-20 min-h-0 md:grid-cols-2 md:gap-4 md:overflow-hidden md:pb-0 lg:grid-cols-[5fr_5fr_3fr] lg:gap-6">
                             {/* Column 1: Detail (+ Lunch on Tablet) */}
                             <div className="flex flex-col gap-4 h-full overflow-hidden order-1 min-h-0">
                                 {/* Student Detail */}

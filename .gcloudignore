@@ -1,0 +1,31 @@
+# 기본 git 제외
+.git
+.gitignore
+.gitattributes
+
+# 로그
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# 의존성(컨테이너 내에서 새로 설치)
+node_modules/
+
+# 로컬 빌드 산출물(컨테이너 내에서 다시 빌드)
+dist/
+dist-ssr/
+
+# 에디터
+.vscode/
+.idea/
+.DS_Store
+
+# 환경변수 (유출 방지)
+.env
+.env.*
+!.env.example
+
+# Antigravity / Cursor 로컬 설정
+.antigravity/
+.cursor/

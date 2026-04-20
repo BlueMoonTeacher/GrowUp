@@ -896,10 +896,9 @@ const ScheduleManager = (): React.ReactElement => {
         }
     };
 
-    const isChecklistDoneThisPeriod = (item: ChecklistItem) => {
-        const pk = getPeriodKeyForType(item.type);
-        return checklistCompletions.some(c => c.checklistItemId === item.id && c.periodKey === pk);
-    };
+    /** 완료 기록에 해당 항목이 남아 있으면 사이드바에서 숨김. 복원 시에만 다시 표시 (날짜가 바뀌어도 자동으로 목록에 되돌아오지 않음) */
+    const isChecklistSuppressedByCompletion = (item: ChecklistItem) =>
+        checklistCompletions.some(c => c.checklistItemId === item.id);
 
     const handleCompleteChecklist = async (item: ChecklistItem) => {
         const user = auth.currentUser;
@@ -1206,7 +1205,7 @@ const ScheduleManager = (): React.ReactElement => {
                         title="일일 체크리스트"
                         dateLabel={formatDateKoreanFull(new Date())}
                         type="daily"
-                        items={checklists.filter(c => c.type === 'daily' && !isChecklistDoneThisPeriod(c))}
+                        items={checklists.filter(c => c.type === 'daily' && !isChecklistSuppressedByCompletion(c))}
                         onAdd={handleAddChecklist}
                         onComplete={handleCompleteChecklist}
                         onDelete={handleDeleteChecklist}
@@ -1225,7 +1224,7 @@ const ScheduleManager = (): React.ReactElement => {
                         title="주간 실천계획"
                         dateLabel={formatWeekRangeKorean(new Date())}
                         type="weekly"
-                        items={checklists.filter(c => c.type === 'weekly' && !isChecklistDoneThisPeriod(c))}
+                        items={checklists.filter(c => c.type === 'weekly' && !isChecklistSuppressedByCompletion(c))}
                         onAdd={handleAddChecklist}
                         onComplete={handleCompleteChecklist}
                         onDelete={handleDeleteChecklist}
@@ -1244,7 +1243,7 @@ const ScheduleManager = (): React.ReactElement => {
                         title="월간 실천계획"
                         dateLabel={formatMonthKorean(new Date())}
                         type="monthly"
-                        items={checklists.filter(c => c.type === 'monthly' && !isChecklistDoneThisPeriod(c))}
+                        items={checklists.filter(c => c.type === 'monthly' && !isChecklistSuppressedByCompletion(c))}
                         onAdd={handleAddChecklist}
                         onComplete={handleCompleteChecklist}
                         onDelete={handleDeleteChecklist}

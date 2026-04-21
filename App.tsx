@@ -244,7 +244,7 @@ const App = (): React.ReactElement => {
         </div>
       </header>
 
-      <main className="flex-1 w-full min-h-0 overflow-hidden px-1 py-2 transition-all sm:px-4 sm:py-4 lg:px-6 pb-16 sm:pb-4">
+      <main className="flex min-h-0 w-full flex-1 flex-col overflow-hidden px-1 py-2 pb-12 transition-all sm:px-4 sm:py-4 sm:pb-4 lg:px-6">
         {view === 'dashboard' ? (
           <Dashboard
             students={students}

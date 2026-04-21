@@ -210,7 +210,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
     const isStudentSelectableTab = activeTab === 'growth' || (activeTab === 'attendance' && attendanceViewMode === 'individual');
 
     return (
-        <div className="grid h-full min-h-0 min-w-0 grid-cols-1 gap-3 md:grid-cols-12 md:gap-3 lg:gap-4">
+        <div className="grid h-full min-h-0 min-w-0 flex-1 grid-cols-1 gap-3 md:grid-cols-12 md:gap-3 lg:gap-4">
             {/* Left Column: Student List - Hidden in Overview/Planner Mode AND Hidden on Mobile (replaced by dropdown) */}
             {!isFullWidthMode && (
                 <div className="hidden min-h-0 min-w-0 flex-col gap-3 overflow-hidden md:flex md:col-span-3 lg:col-span-2">
@@ -329,14 +329,15 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                     </div>
                 </div>
 
-                <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden md:overflow-hidden">
-                    {/* Growth Record View — 모바일: 한 스크롤로 전체 높이 확장 / md+: 기존 고정+내부 스크롤 */}
+                <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden md:overflow-hidden">
+                    {/* Growth Record View — 모바일: 래퍼 flex-1로 남는 높이 전달(빈 화면 하단 여백 완화). md: contents로 그리드가 스크롤 영역 직속 */}
                     {activeTab === 'growth' && (
-                        <div className="grid min-h-0 min-w-0 grid-cols-1 gap-2 pb-20 max-md:h-auto max-md:auto-rows-auto max-md:overflow-visible md:h-full md:min-h-0 md:auto-rows-[minmax(0,1fr)] md:grid-cols-2 md:gap-3 md:overflow-hidden md:pb-0 lg:grid-cols-[5fr_5fr_3fr] lg:gap-3">
+                        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col md:contents">
+                        <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-2 pb-6 max-md:overflow-visible md:grid md:h-full md:auto-rows-[minmax(0,1fr)] md:grid-cols-2 md:gap-3 md:overflow-hidden md:pb-0 lg:grid-cols-[5fr_5fr_3fr] lg:gap-3">
                             {/* Column 1: Detail (+ Lunch on Tablet) */}
-                            <div className="order-1 flex min-h-0 min-w-0 flex-col gap-3 max-md:h-auto max-md:overflow-visible md:h-full md:min-h-0 md:overflow-hidden md:gap-4">
+                            <div className="order-1 flex min-h-0 min-w-0 flex-col gap-3 max-md:min-h-0 max-md:flex-1 max-md:overflow-visible md:h-full md:overflow-hidden md:gap-4">
                                 {/* Student Detail — md:min-h-0 필수: flex-1+스크롤 자식이 행 높이를 채우려면 */}
-                                <div className={`max-md:flex-none max-md:overflow-visible md:min-h-0 md:flex-1 md:overflow-y-auto custom-scrollbar md:pb-24 ${selectedStudent ? '' : 'flex min-h-0 flex-col'}`}>
+                                <div className={`max-md:min-h-0 max-md:flex-1 max-md:overflow-visible md:min-h-0 md:flex-1 md:overflow-y-auto custom-scrollbar md:pb-24 ${selectedStudent ? '' : 'flex min-h-0 flex-col'}`}>
                                     {selectedStudent ? (
                                         <>
                                             <div className="md:hidden mb-2">
@@ -363,7 +364,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                                     ) : (
                                         <div className="flex min-h-[10rem] flex-1 flex-col items-center justify-center rounded-xl border border-base-300/60 bg-base-100 p-8 shadow-lg md:min-h-0">
                                             <h3 className="text-lg font-semibold text-base-content text-center mt-4">학생을 선택해주세요</h3>
-                                            <p className="text-base-content-secondary mt-1 text-sm text-center hidden lg:block">목록에서 학생을 선택하면 상세 정보가 표시됩니다.</p>
+                                            <p className="text-base-content-secondary mt-1 text-sm text-center md:hidden lg:block">목록에서 학생을 선택하면 상세 정보가 표시됩니다.</p>
                                         </div>
                                     )}
                                 </div>
@@ -375,7 +376,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                             </div>
 
                             {/* Column 2: Behavior Log (Center on PC, Right on Tablet) */}
-                            <div className="order-2 min-h-0 min-w-0 max-md:h-auto max-md:overflow-visible md:h-full md:min-h-0 md:overflow-hidden">
+                            <div className="order-2 min-h-0 min-w-0 shrink-0 max-md:overflow-visible md:h-full md:overflow-hidden">
                                 {selectedStudent ? (
                                     <BehaviorLog
                                         student={selectedStudent}
@@ -384,23 +385,23 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                                         onUpdateStudent={onUpdateStudent}
                                     />
                                 ) : (
-                                    <div className="flex h-full min-h-[10rem] flex-col items-center justify-center rounded-xl border border-base-300/60 bg-base-100 p-8 shadow-lg md:min-h-0">
+                                    <div className="flex min-h-[10rem] flex-col items-center justify-center rounded-xl border border-base-300/60 bg-base-100 p-8 shadow-lg max-md:min-h-0 md:h-full md:min-h-0">
                                         <p className="text-base-content-secondary mt-4 font-medium">행동 기록을 보려면 학생을 선택하세요.</p>
                                     </div>
                                 )}
                             </div>
 
                             {/* Column 3: Lunch (Far Right on PC, Moved to Col 1 on Tablet) */}
-                            {/* Mobile: h-auto min-h-[400px] to allow scrolling with the page */}
-                            <div className="order-3 min-h-0 min-w-0 shrink-0 max-md:h-auto max-md:overflow-visible rounded-xl md:hidden md:overflow-hidden lg:block lg:h-full">
+                            <div className="order-3 min-h-0 min-w-0 shrink-0 max-md:overflow-visible rounded-xl md:hidden md:overflow-hidden lg:block lg:h-full">
                                 <LunchMenu settings={settings} />
                             </div>
+                        </div>
                         </div>
                     )}
 
                     {/* Attendance View */}
                     {activeTab === 'attendance' && (
-                        <div className="h-full">
+                        <div className="flex min-h-0 flex-1 flex-col">
                             {attendanceViewMode === 'overview' ? (
                                 <AttendanceOverview
                                     students={students}
@@ -424,21 +425,21 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
 
                     {/* Evaluation View */}
                     {activeTab === 'evaluation' && (
-                        <div className="h-full">
+                        <div className="flex min-h-0 flex-1 flex-col">
                             <EvaluationManager students={sortedStudents} settings={settings} />
                         </div>
                     )}
 
                     {/* Planner View */}
                     {activeTab === 'planner' && (
-                        <div className="h-full">
+                        <div className="flex min-h-0 flex-1 flex-col">
                             <ClassPlanner />
                         </div>
                     )}
 
                     {/* Schedule View */}
                     {activeTab === 'schedule' && (
-                        <div className="h-full">
+                        <div className="flex min-h-0 flex-1 flex-col">
                             <ScheduleManager />
                         </div>
                     )}

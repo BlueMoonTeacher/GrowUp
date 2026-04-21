@@ -185,11 +185,9 @@ const LunchMenu = ({ settings }: LunchMenuProps): React.ReactElement => {
                         <NoDataMessage emoji="" message="급식 정보가 없습니다." />
                     ) : (
                         <div className="space-y-3">
-                            <div className="rounded-xl border border-emerald-400/70 bg-emerald-100 p-1 shadow-sm ring-1 ring-emerald-300/50">
-                                <div className="flex flex-col items-center justify-center gap-0.5 rounded-lg border border-emerald-500/40 bg-emerald-200/90 px-3 py-2 leading-none">
-                                    <span className="text-[11px] font-bold leading-none text-emerald-900">총 칼로리</span>
-                                    <span className="text-xl font-black leading-none tracking-tight text-emerald-950 sm:text-2xl">{todayMeal.CAL_INFO}</span>
-                                </div>
+                            <div className="flex flex-col items-center justify-center gap-0.5 rounded-xl border border-amber-400/80 bg-amber-100 px-3 py-2.5 shadow-sm">
+                                <span className="text-[11px] font-bold text-amber-900">총 칼로리</span>
+                                <span className="text-xl font-black tracking-tight text-amber-950 sm:text-2xl">{todayMeal.CAL_INFO}</span>
                             </div>
                             <div className="flex min-w-0 flex-wrap justify-center gap-2 py-1">
                                 {todayMenuItems.map((item, i) => (

@@ -876,6 +876,17 @@ const ScheduleManager = (): React.ReactElement => {
         return cat?.colorClass || 'bg-gray-100 text-gray-800 border-gray-200';
     };
 
+    /** 모바일 전용: 오늘 날짜 일정 목록(캘린더 셀 밖에서 읽기 쉽게) */
+    const todayScheduleEvents = useMemo(() => {
+        const todayStr = getTodayString();
+        const list = events.filter(e => e.date === todayStr);
+        list.sort((a, b) => {
+            if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
+            return (a.time || '').localeCompare(b.time || '');
+        });
+        return list;
+    }, [events]);
+
     // --- Checklist Handlers ---
     const handleAddChecklist = async (type: ChecklistType, content: string) => {
         const user = auth.currentUser;
@@ -973,9 +984,9 @@ const ScheduleManager = (): React.ReactElement => {
     };
 
     return (
-        <div className="h-full flex flex-col md:flex-row gap-6 overflow-y-auto md:overflow-hidden custom-scrollbar">
-            {/* Left: Calendar (LG: 70%) */}
-            <div className="bg-base-100 rounded-xl shadow-lg border border-base-300/60 flex flex-col overflow-hidden relative md:flex-[7] min-h-0 shrink-0">
+        <div className="h-full flex flex-col gap-6 overflow-y-auto custom-scrollbar md:flex-row md:overflow-hidden">
+            {/* Left: Calendar (LG: 70%) — 모바일 order-1 */}
+            <div className="relative order-1 flex min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-base-300/60 bg-base-100 shadow-lg md:order-none md:flex-[7]">
                 {/* Header */}
                 <div className="p-3 sm:p-4 border-b border-base-300 flex flex-col sm:flex-row justify-between items-center bg-base-50 shrink-0 gap-3 sm:gap-0">
                     {/* Left Group */}
@@ -1197,8 +1208,47 @@ const ScheduleManager = (): React.ReactElement => {
                 </div>
             </div>
 
-            {/* Right: Checklists (LG: 30%) - iPad Fix: Added pb-32 */}
-            <div className="md:flex-[3] flex flex-col gap-4 md:overflow-y-auto custom-scrollbar md:h-full h-auto pb-32 md:pb-0 min-h-0 shrink-0">
+            {/* 모바일만: 캘린더 ↔ 일일 체크리스트 사이에 오늘 일정 요약 (PC 레이아웃·DOM은 md에서 숨김) */}
+            {scheduleMainView === 'calendar' && (
+                <section
+                    className="order-2 flex shrink-0 flex-col gap-2 border-b border-base-300 bg-base-50 px-3 py-3 md:hidden"
+                    aria-label="오늘 일정 요약"
+                >
+                    <h3 className="text-xs font-bold text-base-content">
+                        오늘 일정 <span className="font-semibold text-base-content-secondary">· {formatDateKoreanFull(new Date())}</span>
+                    </h3>
+                    {todayScheduleEvents.length === 0 ? (
+                        <p className="text-sm leading-snug text-base-content-secondary">
+                            예정된 일정이 없습니다. 위 캘린더에서 날짜를 눌러 추가할 수 있어요.
+                        </p>
+                    ) : (
+                        <ul className="flex flex-col gap-2">
+                            {todayScheduleEvents.map(event => (
+                                <li key={event.id}>
+                                    <button
+                                        type="button"
+                                        onClick={() => openEventModal(getTodayString(), event)}
+                                        className={`w-full rounded-lg border px-3 py-2 text-left text-sm shadow-sm transition-opacity hover:opacity-95 ${getCategoryColor(event.category)} ${event.isCompleted ? 'opacity-60 line-through' : ''}`}
+                                    >
+                                        <div className="flex items-start gap-2">
+                                            {settings.viewOptions.showTime && event.time && (
+                                                <span className="shrink-0 font-mono text-xs font-extrabold opacity-90">{event.time}</span>
+                                            )}
+                                            <span className="min-w-0 flex-1 break-words font-semibold">{event.title}</span>
+                                        </div>
+                                        {settings.viewOptions.showLocation && event.location && (
+                                            <p className="mt-1 text-xs opacity-80">{event.location}</p>
+                                        )}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </section>
+            )}
+
+            {/* Right: Checklists (LG: 30%) - iPad Fix: Added pb-32 — 모바일 order-3 */}
+            <div className="order-3 flex h-auto min-h-0 shrink-0 flex-col gap-4 pb-32 custom-scrollbar max-md:w-full md:order-none md:h-full md:flex-[3] md:overflow-y-auto md:pb-0">
                 {/* Daily */}
                 <div className="shrink-0">
                     <ChecklistSection

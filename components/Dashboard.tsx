@@ -361,7 +361,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                                             </div>
                                         </>
                                     ) : (
-                                        <div className="h-40 md:h-full flex flex-col items-center justify-center bg-base-100 rounded-xl shadow-lg border border-base-300/60 p-8">
+                                        <div className="flex min-h-[10rem] flex-1 flex-col items-center justify-center rounded-xl border border-base-300/60 bg-base-100 p-8 shadow-lg md:min-h-0">
                                             <h3 className="text-lg font-semibold text-base-content text-center mt-4">학생을 선택해주세요</h3>
                                             <p className="text-base-content-secondary mt-1 text-sm text-center hidden lg:block">목록에서 학생을 선택하면 상세 정보가 표시됩니다.</p>
                                         </div>

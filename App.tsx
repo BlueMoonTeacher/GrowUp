@@ -184,7 +184,7 @@ const App = (): React.ReactElement => {
                 {view === 'dashboard' && (
                   <button
                     onClick={() => handleShowForm()}
-                    className="bg-primary text-primary-content font-bold py-1.5 px-3 rounded-lg shadow-sm hover:shadow-md hover:bg-primary-focus focus:outline-none transition-all duration-200 flex items-center space-x-2 text-xs sm:text-sm whitespace-nowrap justify-center"
+                    className="hidden md:flex bg-primary text-primary-content font-bold py-1.5 px-3 rounded-lg shadow-sm hover:shadow-md hover:bg-primary-focus focus:outline-none transition-all duration-200 items-center space-x-2 text-xs sm:text-sm whitespace-nowrap justify-center"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-4 sm:w-4" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />

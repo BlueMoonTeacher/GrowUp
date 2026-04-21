@@ -332,11 +332,11 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                 <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden md:overflow-hidden">
                     {/* Growth Record View — 모바일: 한 스크롤로 전체 높이 확장 / md+: 기존 고정+내부 스크롤 */}
                     {activeTab === 'growth' && (
-                        <div className="grid min-h-0 min-w-0 auto-rows-auto grid-cols-1 gap-2 pb-20 max-md:h-auto max-md:overflow-visible md:h-full md:grid-cols-2 md:gap-3 md:overflow-hidden md:pb-0 lg:grid-cols-[5fr_5fr_3fr] lg:gap-3">
+                        <div className="grid min-h-0 min-w-0 grid-cols-1 gap-2 pb-20 max-md:h-auto max-md:auto-rows-auto max-md:overflow-visible md:h-full md:min-h-0 md:auto-rows-[minmax(0,1fr)] md:grid-cols-2 md:gap-3 md:overflow-hidden md:pb-0 lg:grid-cols-[5fr_5fr_3fr] lg:gap-3">
                             {/* Column 1: Detail (+ Lunch on Tablet) */}
-                            <div className="order-1 flex min-h-0 min-w-0 flex-col gap-3 max-md:h-auto max-md:overflow-visible md:h-full md:overflow-hidden md:gap-4">
-                                {/* Student Detail */}
-                                <div className={`max-md:flex-none max-md:overflow-visible md:flex-1 md:overflow-y-auto custom-scrollbar md:pb-24 ${selectedStudent ? '' : 'flex flex-col'}`}>
+                            <div className="order-1 flex min-h-0 min-w-0 flex-col gap-3 max-md:h-auto max-md:overflow-visible md:h-full md:min-h-0 md:overflow-hidden md:gap-4">
+                                {/* Student Detail — md:min-h-0 필수: flex-1+스크롤 자식이 행 높이를 채우려면 */}
+                                <div className={`max-md:flex-none max-md:overflow-visible md:min-h-0 md:flex-1 md:overflow-y-auto custom-scrollbar md:pb-24 ${selectedStudent ? '' : 'flex min-h-0 flex-col'}`}>
                                     {selectedStudent ? (
                                         <>
                                             <div className="md:hidden mb-2">
@@ -375,7 +375,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                             </div>
 
                             {/* Column 2: Behavior Log (Center on PC, Right on Tablet) */}
-                            <div className="order-2 min-h-0 min-w-0 max-md:h-auto max-md:overflow-visible md:h-full md:overflow-hidden">
+                            <div className="order-2 min-h-0 min-w-0 max-md:h-auto max-md:overflow-visible md:h-full md:min-h-0 md:overflow-hidden">
                                 {selectedStudent ? (
                                     <BehaviorLog
                                         student={selectedStudent}
@@ -384,8 +384,8 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                                         onUpdateStudent={onUpdateStudent}
                                     />
                                 ) : (
-                                    <div className="h-full bg-base-100 rounded-xl shadow-lg border border-base-300/60 flex flex-col items-center justify-center p-8">
-                                        <p className="text-base-content-secondary font-medium mt-4">행동 기록을 보려면 학생을 선택하세요.</p>
+                                    <div className="flex h-full min-h-[10rem] flex-col items-center justify-center rounded-xl border border-base-300/60 bg-base-100 p-8 shadow-lg md:min-h-0">
+                                        <p className="text-base-content-secondary mt-4 font-medium">행동 기록을 보려면 학생을 선택하세요.</p>
                                     </div>
                                 )}
                             </div>

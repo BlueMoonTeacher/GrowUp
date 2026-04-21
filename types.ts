@@ -130,6 +130,8 @@ export interface ChecklistItem {
   content: string;
   isChecked: boolean;
   createdAt: number;
+  /** 일일 체크리스트만 사용. 작을수록 위(먼저 할 일). 드래그로 순서 변경 시 갱신 */
+  sortOrder?: number;
 }
 
 /** 체크 완료 시 기록 (기간별 1건, 복원 시 삭제) */

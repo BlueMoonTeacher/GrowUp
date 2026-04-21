@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { firestore, auth } from '../firebase';
 import { ScheduleEvent, ScheduleSettings, ScheduleCategoryDef, ChecklistItem, ChecklistType, ChecklistCompletion } from '../types';
 import { useModal } from '../context/ModalContext';
@@ -48,6 +48,21 @@ const COLOR_PALETTE = [
 const getTodayString = () => new Date().toLocaleDateString('en-CA');
 
 // --- Checklist Component ---
+const ITEMS_PREVIEW_COUNT = 4;
+
+const DAILY_RANK_VISIBLE_KEY = 'growup-daily-checklist-show-rank';
+
+const sortDailyChecklistItems = (list: ChecklistItem[]): ChecklistItem[] => {
+    return [...list].sort((a, b) => {
+        const ao = a.sortOrder;
+        const bo = b.sortOrder;
+        if (ao != null && bo != null) return ao - bo;
+        if (ao != null && bo == null) return -1;
+        if (ao == null && bo != null) return 1;
+        return a.createdAt - b.createdAt;
+    });
+};
+
 interface ChecklistSectionProps {
     title: string;
     dateLabel: string;
@@ -63,16 +78,49 @@ interface ChecklistSectionProps {
         icon: string;
         accent: string;
     };
+    /** 일일 체크리스트: 순서 저장·드래그·순위 표시 */
+    dailyOrdering?: {
+        onReorder: (orderedIds: string[]) => void;
+    };
 }
 
-const ITEMS_PREVIEW_COUNT = 4;
-
-const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, onDelete, colorTheme }: ChecklistSectionProps) => {
+const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, onDelete, colorTheme, dailyOrdering }: ChecklistSectionProps) => {
     const [newItemText, setNewItemText] = useState('');
     const [isExpanded, setIsExpanded] = useState(false);
+    const [dragIndex, setDragIndex] = useState<number | null>(null);
+    const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+    const [showRankNumbers, setShowRankNumbers] = useState(() => {
+        try {
+            return localStorage.getItem(DAILY_RANK_VISIBLE_KEY) !== 'false';
+        } catch {
+            return true;
+        }
+    });
 
-    const hasMoreItems = items.length > ITEMS_PREVIEW_COUNT;
-    const currentItems = isExpanded || !hasMoreItems ? items : items.slice(0, ITEMS_PREVIEW_COUNT);
+    useEffect(() => {
+        try {
+            localStorage.setItem(DAILY_RANK_VISIBLE_KEY, String(showRankNumbers));
+        } catch { /* ignore */ }
+    }, [showRankNumbers]);
+
+    const enableDailyOrder = type === 'daily' && !!dailyOrdering?.onReorder;
+
+    const sortedItems = useMemo(() => {
+        if (enableDailyOrder) return sortDailyChecklistItems(items);
+        return items;
+    }, [items, enableDailyOrder]);
+
+    const hasMoreItems = sortedItems.length > ITEMS_PREVIEW_COUNT;
+    const currentItems = isExpanded || !hasMoreItems ? sortedItems : sortedItems.slice(0, ITEMS_PREVIEW_COUNT);
+
+    const applyReorder = useCallback((from: number, to: number) => {
+        if (!dailyOrdering?.onReorder || from === to) return;
+        const full = [...sortedItems];
+        const boundedTo = Math.max(0, Math.min(full.length - 1, to));
+        const [removed] = full.splice(from, 1);
+        full.splice(boundedTo, 0, removed);
+        dailyOrdering.onReorder(full.map(i => i.id));
+    }, [sortedItems, dailyOrdering]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -80,7 +128,7 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
             onAdd(type, newItemText.trim());
             setNewItemText('');
             // Automatically expand when adding new items if it exceeds the preview count
-            if (!isExpanded && items.length >= ITEMS_PREVIEW_COUNT) {
+            if (!isExpanded && sortedItems.length >= ITEMS_PREVIEW_COUNT) {
                 setIsExpanded(true);
             }
         }
@@ -89,7 +137,7 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
     return (
         <div className={`${colorTheme.bg} rounded-xl p-4 border ${colorTheme.border} shadow-sm flex flex-col transition-all duration-300`}>
             {/* Header with Expand/Collapse Toggle */}
-            <div className="flex items-center justify-between mb-3 shrink-0 min-h-8">
+            <div className="flex items-start justify-between gap-2 mb-3 shrink-0 min-h-8">
                 <div className="flex flex-col gap-0.5 min-w-0">
                     <div className="flex items-center gap-2">
                         <span className="text-lg shrink-0">{colorTheme.icon}</span>
@@ -98,57 +146,157 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
                     <p className="text-[11px] sm:text-xs font-semibold text-gray-600 pl-7 leading-tight">{dateLabel}</p>
                 </div>
 
-                {/* Expand/Collapse Toggle - Only show if items exceed preview count */}
-                {hasMoreItems && (
-                    <button
-                        onClick={() => setIsExpanded(!isExpanded)}
-                        className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all border
-                            ${isExpanded
-                                ? `bg-white ${colorTheme.title} ${colorTheme.border} shadow-sm`
-                                : `bg-white/60 text-gray-500 border-transparent hover:bg-white hover:text-gray-700`
-                            }
-                        `}
-                    >
-                        <span>{isExpanded ? '접기' : `+${items.length - ITEMS_PREVIEW_COUNT} 더보기`}</span>
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className={`h-3 w-3 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
+                <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    {enableDailyOrder && sortedItems.length > 0 && (
+                        <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-white/80 bg-white/70 px-2 py-0.5 text-[10px] font-bold text-gray-600 shadow-sm hover:bg-white">
+                            <input
+                                type="checkbox"
+                                className="checkbox checkbox-xs rounded border-gray-300"
+                                checked={showRankNumbers}
+                                onChange={e => setShowRankNumbers(e.target.checked)}
+                            />
+                            <span className="whitespace-nowrap">순위 표시</span>
+                        </label>
+                    )}
+                    {/* Expand/Collapse Toggle - Only show if items exceed preview count */}
+                    {hasMoreItems && (
+                        <button
+                            type="button"
+                            onClick={() => setIsExpanded(!isExpanded)}
+                            className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold transition-all border
+                                ${isExpanded
+                                    ? `bg-white ${colorTheme.title} ${colorTheme.border} shadow-sm`
+                                    : `bg-white/60 text-gray-500 border-transparent hover:bg-white hover:text-gray-700`
+                                }
+                            `}
                         >
-                            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                    </button>
-                )}
+                            <span>{isExpanded ? '접기' : `+${sortedItems.length - ITEMS_PREVIEW_COUNT} 더보기`}</span>
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className={`h-3 w-3 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                            >
+                                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Items List - Dynamic Height */}
             <div className={`overflow-y-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[800px]' : 'max-h-[250px]'} space-y-1 mb-3`}>
                 {currentItems.length > 0 ? (
-                    currentItems.map(item => (
-                        <div
-                            key={item.id}
-                            className="group flex items-start gap-2 text-sm animate-[fadeIn_0.2s_ease-out] p-1.5 rounded-lg hover:bg-white/80 hover:shadow-sm transition-all"
-                        >
-                            <button
-                                type="button"
-                                title="완료하면 목록에서 숨겨지고 완료 기록에 남습니다"
-                                onClick={() => onComplete(item)}
-                                className="mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 bg-white border-gray-300 hover:border-red-400 hover:bg-red-50"
-                            />
-                            <span className="flex-1 break-words leading-tight text-gray-700 font-medium">
-                                {item.content}
-                            </span>
-                            <button
-                                onClick={() => onDelete(item.id)}
-                                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
+                    currentItems.map(item => {
+                        const globalIndex = sortedItems.findIndex(x => x.id === item.id);
+                        const isDragging = enableDailyOrder && dragIndex === globalIndex;
+                        const isOver = enableDailyOrder && dragOverIndex === globalIndex;
+                        return (
+                            <div
+                                key={item.id}
+                                draggable={enableDailyOrder}
+                                onDragStart={e => {
+                                    if (!enableDailyOrder) return;
+                                    setDragIndex(globalIndex);
+                                    e.dataTransfer.effectAllowed = 'move';
+                                    e.dataTransfer.setData('text/plain', String(globalIndex));
+                                }}
+                                onDragEnd={() => {
+                                    setDragIndex(null);
+                                    setDragOverIndex(null);
+                                }}
+                                onDragOver={e => {
+                                    if (!enableDailyOrder || dragIndex === null) return;
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = 'move';
+                                    setDragOverIndex(globalIndex);
+                                }}
+                                onDrop={e => {
+                                    e.preventDefault();
+                                    if (!enableDailyOrder) return;
+                                    const raw = e.dataTransfer.getData('text/plain');
+                                    let from: number | null = dragIndex;
+                                    if (raw !== '') {
+                                        const parsed = parseInt(raw, 10);
+                                        if (!Number.isNaN(parsed)) from = parsed;
+                                    }
+                                    setDragOverIndex(null);
+                                    setDragIndex(null);
+                                    if (from === null) return;
+                                    applyReorder(from, globalIndex);
+                                }}
+                                className={`group flex items-start gap-1.5 text-sm animate-[fadeIn_0.2s_ease-out] p-1.5 rounded-lg hover:bg-white/80 hover:shadow-sm transition-all
+                                    ${isDragging ? 'opacity-50' : ''}
+                                    ${isOver && dragIndex !== globalIndex ? 'ring-1 ring-red-300/80 bg-white/90' : ''}
+                                `}
                             >
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                                </svg>
-                            </button>
-                        </div>
-                    ))
+                                {enableDailyOrder && (
+                                    <div className="flex shrink-0 flex-col items-center gap-0.5 pt-0.5">
+                                        <button
+                                            type="button"
+                                            title="위로 이동"
+                                            disabled={globalIndex <= 0}
+                                            onClick={() => applyReorder(globalIndex, globalIndex - 1)}
+                                            className="rounded p-0 text-gray-400 hover:bg-white hover:text-red-600 disabled:opacity-20 disabled:hover:bg-transparent"
+                                        >
+                                            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                                                <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                                            </svg>
+                                        </button>
+                                        <span
+                                            className="cursor-grab text-gray-400 hover:text-gray-600 active:cursor-grabbing"
+                                            title="드래그하여 순서 변경"
+                                        >
+                                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                                <circle cx="9" cy="8" r="1.5" />
+                                                <circle cx="15" cy="8" r="1.5" />
+                                                <circle cx="9" cy="12" r="1.5" />
+                                                <circle cx="15" cy="12" r="1.5" />
+                                                <circle cx="9" cy="16" r="1.5" />
+                                                <circle cx="15" cy="16" r="1.5" />
+                                            </svg>
+                                        </span>
+                                        <button
+                                            type="button"
+                                            title="아래로 이동"
+                                            disabled={globalIndex >= sortedItems.length - 1}
+                                            onClick={() => applyReorder(globalIndex, globalIndex + 1)}
+                                            className="rounded p-0 text-gray-400 hover:bg-white hover:text-red-600 disabled:opacity-20 disabled:hover:bg-transparent"
+                                        >
+                                            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                                                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                )}
+                                {enableDailyOrder && showRankNumbers && (
+                                    <span
+                                        className={`mt-0.5 flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded text-[10px] font-extrabold tabular-nums ${colorTheme.title} bg-white/90 border ${colorTheme.border}`}
+                                    >
+                                        {globalIndex + 1}
+                                    </span>
+                                )}
+                                <button
+                                    type="button"
+                                    title="완료하면 목록에서 숨겨지고 완료 기록에 남습니다"
+                                    onClick={() => onComplete(item)}
+                                    className="mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 bg-white border-gray-300 hover:border-red-400 hover:bg-red-50"
+                                />
+                                <span className="flex-1 break-words leading-tight text-gray-700 font-medium">
+                                    {item.content}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() => onDelete(item.id)}
+                                    className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                                    </svg>
+                                </button>
+                            </div>
+                        );
+                    })
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-gray-400 italic text-xs">
                         <p>등록된 할 일이 없습니다</p>
@@ -892,11 +1040,17 @@ const ScheduleManager = (): React.ReactElement => {
         const user = auth.currentUser;
         if (!user) return;
 
+        const dailyMaxSort =
+            type === 'daily'
+                ? checklists.filter(c => c.type === 'daily').reduce((m, i) => Math.max(m, i.sortOrder ?? -1), -1)
+                : -1;
+
         const newItem: Omit<ChecklistItem, 'id'> = {
             type,
             content,
             isChecked: false,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            ...(type === 'daily' ? { sortOrder: dailyMaxSort + 1 } : {}),
         };
 
         try {
@@ -904,6 +1058,34 @@ const ScheduleManager = (): React.ReactElement => {
             setChecklists(prev => [...prev, { ...newItem, id: docRef.id }]);
         } catch (error) {
             console.error("Error adding checklist:", error);
+        }
+    };
+
+    const handleReorderDailyChecklist = async (orderedIds: string[]) => {
+        const user = auth.currentUser;
+        if (!user) return;
+
+        const orderMap = new Map(orderedIds.map((id, index) => [id, index]));
+        const prevSnapshot = checklists;
+
+        setChecklists(p =>
+            p.map(item => {
+                if (item.type !== 'daily' || !orderMap.has(item.id)) return item;
+                return { ...item, sortOrder: orderMap.get(item.id)! };
+            })
+        );
+
+        try {
+            const batch = firestore.batch();
+            const colRef = firestore.collection('users').doc(user.uid).collection('checklists');
+            orderedIds.forEach((id, index) => {
+                batch.update(colRef.doc(id), { sortOrder: index });
+            });
+            await batch.commit();
+        } catch (error) {
+            console.error('Error reordering daily checklist:', error);
+            setChecklists(prevSnapshot);
+            await showAlert('순서 저장에 실패했습니다. 네트워크를 확인해 주세요.');
         }
     };
 
@@ -1259,6 +1441,7 @@ const ScheduleManager = (): React.ReactElement => {
                         onAdd={handleAddChecklist}
                         onComplete={handleCompleteChecklist}
                         onDelete={handleDeleteChecklist}
+                        dailyOrdering={{ onReorder: handleReorderDailyChecklist }}
                         colorTheme={{
                             bg: 'bg-red-50',
                             border: 'border-red-100',

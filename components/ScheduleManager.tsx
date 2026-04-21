@@ -63,6 +63,20 @@ const sortDailyChecklistItems = (list: ChecklistItem[]): ChecklistItem[] => {
     });
 };
 
+/** 일일 체크리스트 순위 뱃지: 1·2·3위는 눈에 띄게 구분 */
+const dailyRankBadgeClass = (rank: number): string => {
+    if (rank === 1) {
+        return 'border-amber-500 bg-gradient-to-b from-amber-200 to-amber-300 text-amber-950 shadow-sm ring-1 ring-amber-400/70';
+    }
+    if (rank === 2) {
+        return 'border-slate-400 bg-gradient-to-b from-slate-200 to-slate-300 text-slate-900 shadow-sm ring-1 ring-slate-300/90';
+    }
+    if (rank === 3) {
+        return 'border-orange-600 bg-gradient-to-b from-orange-200 to-orange-300 text-orange-950 shadow-sm ring-1 ring-orange-500/45';
+    }
+    return 'border-rose-200/80 bg-white/90 text-rose-900/90';
+};
+
 interface ChecklistSectionProps {
     title: string;
     dateLabel: string;
@@ -225,45 +239,51 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
                                     if (from === null) return;
                                     applyReorder(from, globalIndex);
                                 }}
-                                className={`group flex items-start gap-1.5 text-sm animate-[fadeIn_0.2s_ease-out] p-1.5 rounded-lg hover:bg-white/80 hover:shadow-sm transition-all
+                                className={`group flex items-center gap-1.5 text-sm animate-[fadeIn_0.2s_ease-out] p-1.5 rounded-lg hover:bg-white/80 hover:shadow-sm transition-all
                                     ${isDragging ? 'opacity-50' : ''}
                                     ${isOver && dragIndex !== globalIndex ? 'ring-1 ring-red-300/80 bg-white/90' : ''}
                                 `}
                             >
                                 {enableDailyOrder && (
-                                    <div className="flex shrink-0 flex-col items-center gap-0.5 pt-0.5">
+                                    <div
+                                        className="flex h-6 shrink-0 flex-row items-center gap-px rounded-md border border-gray-200/80 bg-white/60 px-0.5 shadow-sm"
+                                        title="순서: 위·아래 버튼 또는 줄 전체를 드래그"
+                                    >
                                         <button
                                             type="button"
                                             title="위로 이동"
                                             disabled={globalIndex <= 0}
-                                            onClick={() => applyReorder(globalIndex, globalIndex - 1)}
-                                            className="rounded p-0 text-gray-400 hover:bg-white hover:text-red-600 disabled:opacity-20 disabled:hover:bg-transparent"
+                                            onClick={e => {
+                                                e.stopPropagation();
+                                                applyReorder(globalIndex, globalIndex - 1);
+                                            }}
+                                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-500 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-25"
                                         >
-                                            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                                            <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
                                                 <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
                                             </svg>
                                         </button>
-                                        <span
-                                            className="cursor-grab text-gray-400 hover:text-gray-600 active:cursor-grabbing"
-                                            title="드래그하여 순서 변경"
-                                        >
-                                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                                                <circle cx="9" cy="8" r="1.5" />
-                                                <circle cx="15" cy="8" r="1.5" />
-                                                <circle cx="9" cy="12" r="1.5" />
-                                                <circle cx="15" cy="12" r="1.5" />
-                                                <circle cx="9" cy="16" r="1.5" />
-                                                <circle cx="15" cy="16" r="1.5" />
+                                        <span className="cursor-grab text-gray-400 hover:text-gray-600 active:cursor-grabbing px-0.5" title="드래그하여 순서 변경">
+                                            <svg className="h-3.5 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                                                <circle cx="9" cy="8" r="1.35" />
+                                                <circle cx="15" cy="8" r="1.35" />
+                                                <circle cx="9" cy="12" r="1.35" />
+                                                <circle cx="15" cy="12" r="1.35" />
+                                                <circle cx="9" cy="16" r="1.35" />
+                                                <circle cx="15" cy="16" r="1.35" />
                                             </svg>
                                         </span>
                                         <button
                                             type="button"
                                             title="아래로 이동"
                                             disabled={globalIndex >= sortedItems.length - 1}
-                                            onClick={() => applyReorder(globalIndex, globalIndex + 1)}
-                                            className="rounded p-0 text-gray-400 hover:bg-white hover:text-red-600 disabled:opacity-20 disabled:hover:bg-transparent"
+                                            onClick={e => {
+                                                e.stopPropagation();
+                                                applyReorder(globalIndex, globalIndex + 1);
+                                            }}
+                                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-500 hover:bg-rose-50 hover:text-rose-700 disabled:opacity-25"
                                         >
-                                            <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                                            <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
                                                 <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
                                             </svg>
                                         </button>
@@ -271,7 +291,7 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
                                 )}
                                 {enableDailyOrder && showRankNumbers && (
                                     <span
-                                        className={`mt-0.5 flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded text-[10px] font-extrabold tabular-nums ${colorTheme.title} bg-white/90 border ${colorTheme.border}`}
+                                        className={`flex h-6 min-w-[1.35rem] shrink-0 items-center justify-center rounded-md border text-[11px] font-extrabold tabular-nums ${dailyRankBadgeClass(globalIndex + 1)}`}
                                     >
                                         {globalIndex + 1}
                                     </span>
@@ -280,9 +300,9 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
                                     type="button"
                                     title="완료하면 목록에서 숨겨지고 완료 기록에 남습니다"
                                     onClick={() => onComplete(item)}
-                                    className="mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 bg-white border-gray-300 hover:border-red-400 hover:bg-red-50"
+                                    className="h-4 w-4 shrink-0 rounded border flex items-center justify-center transition-colors bg-white border-gray-300 hover:border-red-400 hover:bg-red-50"
                                 />
-                                <span className="flex-1 break-words leading-tight text-gray-700 font-medium">
+                                <span className="min-w-0 flex-1 break-words leading-tight text-gray-700 font-medium">
                                     {item.content}
                                 </span>
                                 <button

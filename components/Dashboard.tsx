@@ -335,8 +335,10 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                         <div className="grid min-h-0 min-w-0 grid-cols-1 gap-2 pb-20 max-md:h-auto max-md:auto-rows-auto max-md:overflow-visible md:h-full md:min-h-0 md:auto-rows-[minmax(0,1fr)] md:grid-cols-2 md:gap-3 md:overflow-hidden md:pb-0 lg:grid-cols-[5fr_5fr_3fr] lg:gap-3">
                             {/* Column 1: Detail (+ Lunch on Tablet) */}
                             <div className="order-1 flex min-h-0 min-w-0 flex-col gap-3 max-md:h-auto max-md:overflow-visible md:h-full md:min-h-0 md:overflow-hidden md:gap-4">
-                                {/* Student Detail — PC: md:min-h-0+flex-1로 행 높이까지 전달 */}
-                                <div className={`max-md:flex-none max-md:overflow-visible md:min-h-0 md:flex-1 md:overflow-y-auto custom-scrollbar md:pb-24 ${selectedStudent ? '' : 'flex min-h-0 flex-col'}`}>
+                                {/* Student Detail — PC: 학생 없을 때 overflow-y-auto 제거(빈 카드 h-full 깨짐 방지). 학생 있을 때만 스크롤 */}
+                                <div
+                                    className={`max-md:flex-none max-md:overflow-visible md:min-h-0 md:flex-1 md:pb-24 custom-scrollbar ${selectedStudent ? 'md:overflow-y-auto' : 'md:flex md:h-full md:flex-col md:overflow-hidden'} ${selectedStudent ? '' : 'flex min-h-0 flex-col'}`}
+                                >
                                     {selectedStudent ? (
                                         <>
                                             <div className="md:hidden mb-2">
@@ -361,7 +363,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                                             </div>
                                         </>
                                     ) : (
-                                        <div className="flex min-h-[10rem] max-md:flex-none flex-col items-center justify-center rounded-xl border border-base-300/60 bg-base-100 p-8 shadow-lg md:flex-1 md:min-h-0">
+                                        <div className="flex min-h-[10rem] max-md:flex-none flex-col items-center justify-center rounded-xl border border-base-300/60 bg-base-100 p-8 shadow-lg md:h-full md:min-h-0 md:w-full">
                                             <h3 className="text-lg font-semibold text-base-content text-center mt-4">학생을 선택해주세요</h3>
                                             <p className="text-base-content-secondary mt-1 text-sm text-center hidden lg:block">목록에서 학생을 선택하면 상세 정보가 표시됩니다.</p>
                                         </div>

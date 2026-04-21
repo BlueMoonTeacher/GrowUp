@@ -337,7 +337,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                             <div className="order-1 flex min-h-0 min-w-0 flex-col gap-3 max-md:h-auto max-md:overflow-visible md:h-full md:min-h-0 md:overflow-hidden md:gap-4">
                                 {/* Student Detail — PC: 학생 없을 때 overflow-y-auto 제거(빈 카드 h-full 깨짐 방지). 학생 있을 때만 스크롤 */}
                                 <div
-                                    className={`max-md:flex-none max-md:overflow-visible md:min-h-0 md:flex-1 md:pb-24 custom-scrollbar ${selectedStudent ? 'md:overflow-y-auto' : 'md:flex md:h-full md:flex-col md:overflow-hidden'} ${selectedStudent ? '' : 'flex min-h-0 flex-col'}`}
+                                    className={`max-md:flex-none max-md:overflow-visible md:min-h-0 md:flex-1 custom-scrollbar ${selectedStudent ? 'md:overflow-y-auto md:pb-24' : 'md:flex md:h-full md:flex-col md:overflow-hidden'} ${selectedStudent ? '' : 'flex min-h-0 flex-col'}`}
                                 >
                                     {selectedStudent ? (
                                         <>

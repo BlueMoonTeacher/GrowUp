@@ -317,8 +317,8 @@ const AttendanceLog = ({ student, onUpdateStudent, settings }: AttendanceLogProp
                 </div>
             </div>
 
-            {/* Calendar — max-lg: 단일열에서 flex-1·auto-rows-fr가 높이를 압축해 격자가 카드 밖으로 탈출함 → 내용 높이로 확장 */}
-            <div className="flex flex-col rounded-xl border border-base-300/60 bg-base-100 p-5 shadow-lg max-lg:shrink-0 max-lg:flex-none lg:min-h-[300px] lg:flex-1">
+            {/* Calendar — flex-1+auto-rows-fr+min-h 셀 조합이 행 1fr과 충돌해 카드 밖으로 overflow → 콘텐츠 높이로만 확장 */}
+            <div className="flex shrink-0 flex-col rounded-xl border border-base-300/60 bg-base-100 p-5 shadow-lg min-h-0">
                 <div className="flex justify-between items-center mb-6">
                     <button onClick={handlePrevMonth} className="p-2 hover:bg-base-200 rounded-full transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-base-content-secondary" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
@@ -337,7 +337,7 @@ const AttendanceLog = ({ student, onUpdateStudent, settings }: AttendanceLogProp
                     ))}
                 </div>
                 
-                <div className="grid grid-cols-7 gap-2 select-none max-lg:flex-none lg:flex-1 lg:auto-rows-fr">
+                <div className="grid grid-cols-7 gap-2 select-none">
                     {days.map((day, i) => {
                         if (!day) return <div key={`empty-${i}`} className="bg-transparent"></div>;
                         
@@ -354,7 +354,7 @@ const AttendanceLog = ({ student, onUpdateStudent, settings }: AttendanceLogProp
                                 key={day} 
                                 onMouseDown={(e) => handleMouseDown(day, e)}
                                 onMouseEnter={() => handleMouseEnter(day)}
-                                className={`relative p-1 rounded-lg border transition-all flex flex-col items-center justify-start h-full min-h-[50px] sm:min-h-[60px] cursor-pointer
+                                className={`relative flex min-h-[50px] flex-col items-center justify-start rounded-lg border p-1 transition-all sm:min-h-[60px] cursor-pointer
                                     ${isHighlighted ? 'border-primary ring-2 ring-primary ring-offset-1 bg-white z-10' : 'border-base-200 hover:border-primary/50 bg-white'}
                                     ${isInDragRange && !isSelected ? 'bg-primary/10' : ''}
                                 `}

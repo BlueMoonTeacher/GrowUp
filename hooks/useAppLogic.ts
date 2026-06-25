@@ -4,6 +4,7 @@ import { Student, BehaviorRecord } from '../types';
 import { extractStudentInfoFromFile } from '../services/geminiService';
 import { useModal } from '../context/ModalContext';
 import { AppSettings, SchoolYearEntry } from '../App';
+import { DEFAULT_GEMINI_MODEL, normalizeGeminiModel } from '../constants/geminiModels';
 
 export type View = 'dashboard' | 'form' | 'notice';
 
@@ -41,7 +42,7 @@ export const useAppLogic = () => {
 
     const [settings, setSettings] = useState<AppSettings>({
         school: '', grade: '', class: '', schoolYear: '',
-        geminiApiKey: '', geminiModel: 'gemini-2.5-pro'
+        geminiApiKey: '', geminiModel: DEFAULT_GEMINI_MODEL
     });
 
     /** 이 계정에 저장된 모든 학년도·학반 (학생 데이터 기준). 설정 모달에서 목록 표시용 */
@@ -91,7 +92,7 @@ export const useAppLogic = () => {
                         newSettings = {
                             ...loadedSettings,
                             schoolYear: loadedSettings.schoolYear || defaultSchoolYear,
-                            geminiModel: loadedSettings.geminiModel || 'gemini-2.5-pro'
+                            geminiModel: normalizeGeminiModel(loadedSettings.geminiModel)
                         };
                         const active = getActiveYearFromSettings(newSettings);
                         if (active) {
@@ -100,7 +101,7 @@ export const useAppLogic = () => {
                             newSettings.class = active.class;
                         }
                     } else {
-                        newSettings = { school: '', grade: '', class: '', schoolYear: defaultSchoolYear, geminiApiKey: '', geminiModel: 'gemini-2.5-pro' };
+                        newSettings = { school: '', grade: '', class: '', schoolYear: defaultSchoolYear, geminiApiKey: '', geminiModel: DEFAULT_GEMINI_MODEL };
                     }
 
                     setSettings(newSettings);
@@ -122,7 +123,7 @@ export const useAppLogic = () => {
                 }
             } else {
                 setStudents([]);
-                setSettings({ school: '', grade: '', class: '', schoolYear: '', geminiApiKey: '', geminiModel: 'gemini-2.5-pro' });
+                setSettings({ school: '', grade: '', class: '', schoolYear: '', geminiApiKey: '', geminiModel: DEFAULT_GEMINI_MODEL });
                 setIsInitialSetupRequired(false);
                 setIsDataLoading(false);
             }
@@ -290,7 +291,7 @@ export const useAppLogic = () => {
         fileInputRef.current?.click();
     };
 
-    const handleDownloadTemplate = async (e: React.MouseEvent<HTMLAnchorElement>) => {
+    const handleDownloadTemplate = async (e: React.MouseEvent<HTMLElement>) => {
         e.preventDefault();
         try {
             let filename = '기초조사서_양식.hwp';
@@ -395,6 +396,7 @@ export const useAppLogic = () => {
             return;
         }
         try {
+            newSettings.geminiModel = normalizeGeminiModel(newSettings.geminiModel);
             const active = getActiveYearFromSettings(newSettings);
             if (active) {
                 newSettings.schoolYear = active.schoolYear;

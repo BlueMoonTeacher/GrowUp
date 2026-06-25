@@ -6,13 +6,21 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="성장기록" />
+    <meta name="apple-mobile-web-app-title" content="학급 성장 기록장" />
+    <meta name="description" content="Google 로그인으로 개별 사용 모드에서 이용하는 학급 성장 기록장" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="학급 성장 기록장" />
+    <meta property="og:site_name" content="학급 성장 기록장" />
+    <meta property="og:description" content="Google 로그인으로 개별 사용 모드에서 이용하는 학급 성장 기록장" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="학급 성장 기록장" />
+    <meta name="twitter:description" content="Google 로그인으로 개별 사용 모드에서 이용하는 학급 성장 기록장" />
     <meta name="theme-color" content="#22c55e" />
     <meta name="format-detection" content="telephone=no" />
     <title>학급 성장 기록장</title>
     <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" href="https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Seedling/3D/seedling_3d.png" />
-    <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/microsoft/fluentui-emoji/main/assets/Seedling/3D/seedling_3d.png" />
+    <link rel="icon" href="/seedling-icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/seedling-icon.svg" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -93,6 +101,15 @@
           background-color: #f3f4f6 !important;
           color: #1f2937 !important;
         }
+      }
+
+      *::-webkit-scrollbar {
+        display: none;
+      }
+
+      * {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
       }
 
       .custom-scrollbar::-webkit-scrollbar {

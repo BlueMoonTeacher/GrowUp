@@ -178,9 +178,9 @@ const LunchMenu = ({ settings }: LunchMenuProps): React.ReactElement => {
                 </h2>
             </div>
 
-            <div className="max-md:flex-none max-md:overflow-visible max-md:pb-4 min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-24 custom-scrollbar sm:pb-8 md:pb-6">
+            <div className="max-md:flex-none max-md:overflow-visible max-md:pb-4 min-h-0 flex-1 overflow-x-hidden overflow-y-auto pb-24 custom-scrollbar sm:pb-8 md:grid md:grid-cols-2 md:pb-6 xl:block">
                 {/* Today's Lunch Section */}
-                <div className="min-w-0 border-b border-base-300/60 bg-white p-3 sm:p-5">
+                <div className="min-w-0 border-b border-base-300/60 bg-white p-3 sm:p-5 md:border-b-0 md:border-r xl:border-b xl:border-r-0">
                     {isTodayLoading ? <LoadingSpinner /> : !todayMeal ? (
                         <NoDataMessage emoji="" message="급식 정보가 없습니다." />
                     ) : (
@@ -218,7 +218,7 @@ const LunchMenu = ({ settings }: LunchMenuProps): React.ReactElement => {
                 </div>
 
                 {/* Other Day's Lunch Section */}
-                <div className="bg-base-50/50 p-3 max-md:pb-2 md:p-4">
+                <div className="bg-base-50/50 p-3 max-md:pb-2 md:p-5">
                     <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-base-content-secondary opacity-80 md:mb-3">
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                         다른 날짜 급식 보기

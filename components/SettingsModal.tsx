@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { AppSettings, SchoolYearEntry } from '../App';
 import { searchSchool, School } from '../services/neisService';
+import { DEFAULT_GEMINI_MODEL, GEMINI_MODELS } from '../constants/geminiModels';
 
 interface SettingsModalProps {
   currentSettings: AppSettings;
@@ -32,14 +33,6 @@ const EDUCATION_OFFICES = [
   { name: '경상남도교육청', code: 'S10' },
   { name: '제주특별자치도교육청', code: 'T10' }
 ];
-
-const GEMINI_MODELS = [
-  { value: 'gemini-2.5-pro', label: '2.5 Pro (기본 - 고성능)' },
-  { value: 'gemini-2.5-flash', label: '2.5 Flash (빠르고 경제적)' },
-  { value: 'gemini-3-flash-preview', label: '3.0 Flash Preview (최신)' },
-  { value: 'gemini-3-pro-preview', label: '3.0 Pro (최고 성능)' }
-];
-
 
 const defaultSchoolYear = () => {
   const y = new Date().getFullYear();
@@ -384,11 +377,11 @@ const SettingsModal = ({ currentSettings, schoolYearsFromData = [], onSave, onCl
                     type="password"
                     value={settings.geminiApiKey || ''}
                     onChange={handleChange}
-                    placeholder="개인 API Key 입력 (비워두면 기본 키 사용)"
+                    placeholder="개인 Gemini API Key 입력"
                     className="w-full p-2 border border-base-300 rounded-md focus:ring-primary focus:border-primary shadow-sm bg-white text-sm"
                   />
                   <p className="text-[10px] text-base-content-secondary mt-1 ml-1">
-                    * 개인 키를 입력하면 할당량 제한 없이 더 안정적으로 사용할 수 있습니다.
+                    * AI 기능은 이 키로 호출됩니다. Google AI Studio에서 발급한 키를 입력해 주세요.
                   </p>
                 </div>
                 <div>
@@ -398,7 +391,7 @@ const SettingsModal = ({ currentSettings, schoolYearsFromData = [], onSave, onCl
                   <select
                     id="geminiModel"
                     name="geminiModel"
-                    value={settings.geminiModel || 'gemini-2.5-pro'}
+                    value={settings.geminiModel || DEFAULT_GEMINI_MODEL}
                     onChange={handleChange}
                     className="w-full p-2 border border-base-300 rounded-md focus:ring-primary focus:border-primary shadow-sm bg-white text-sm"
                   >

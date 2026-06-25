@@ -210,10 +210,10 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
     const isStudentSelectableTab = activeTab === 'growth' || (activeTab === 'attendance' && attendanceViewMode === 'individual');
 
     return (
-        <div className="grid h-full min-h-0 min-w-0 grid-cols-1 gap-3 md:grid-cols-12 md:gap-3 lg:gap-4">
-            {/* Left Column: Student List - Hidden in Overview/Planner Mode AND Hidden on Mobile (replaced by dropdown) */}
+        <div className="grid h-full min-h-0 min-w-0 grid-cols-1 gap-3 md:gap-3 lg:gap-4 xl:grid-cols-12">
+            {/* Left Column: Student List - wide desktop only. Narrow/portrait screens use the dropdown selector. */}
             {!isFullWidthMode && (
-                <div className="hidden min-h-0 min-w-0 flex-col gap-3 overflow-hidden md:flex md:col-span-3 lg:col-span-2">
+                <div className="hidden min-h-0 min-w-0 flex-col gap-3 overflow-hidden xl:col-span-2 xl:flex">
                     <StudentList
                         students={sortedStudents}
                         selectedStudentId={selectedStudent?.id || null}
@@ -225,14 +225,14 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
             )}
 
             {/* Right Column Area */}
-            <div className={`${isFullWidthMode ? 'md:col-span-12' : 'md:col-span-9 lg:col-span-10'} flex h-full min-h-0 min-w-0 flex-col overflow-hidden`}>
+            <div className={`${isFullWidthMode ? 'xl:col-span-12' : 'xl:col-span-10'} flex h-full min-h-0 min-w-0 flex-col overflow-hidden`}>
 
-                {/* Mobile Sticky Header Area (Tabs + Student Selector) */}
-                <div className="flex flex-col gap-2 mb-2 shrink-0 sticky top-0 z-20 bg-neutral/95 backdrop-blur-sm pt-1 pb-1 md:static md:bg-transparent md:p-0">
+                {/* Responsive Sticky Header Area (Tabs + Student Selector) */}
+                <div className="flex flex-col gap-2 mb-2 shrink-0 sticky top-0 z-[30] bg-neutral/95 backdrop-blur-sm pt-1 pb-1 xl:static xl:bg-transparent xl:p-0">
 
-                    {/* 1. Mobile Student Selector (Only visible on Mobile & relevant tabs) */}
+                    {/* 1. Compact Student Selector (visible until wide desktop) */}
                     {isStudentSelectableTab && (
-                        <div className="md:hidden w-full px-1">
+                        <div className="w-full px-1 xl:hidden">
                             <MobileStudentSelector
                                 students={sortedStudents}
                                 selectedStudent={selectedStudent}
@@ -242,7 +242,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                     )}
 
                     {/* 2. Tab Navigation (+ 생활기록 탭일 때만 태블릿 이상에서 급식 기준일) */}
-                    <div className="flex w-full flex-wrap items-center justify-between gap-2 px-1 md:flex-nowrap md:gap-3">
+                    <div className="flex w-full flex-wrap items-center justify-between gap-2 px-1 md:gap-3 xl:flex-nowrap">
                         <div className="flex min-w-0 w-full flex-1 items-center space-x-1 rounded-xl border border-base-300/50 bg-white/70 p-1 shadow-sm backdrop-blur-sm md:w-fit md:flex-initial">
                             <button
                                 onClick={() => setActiveTab('growth')}
@@ -329,15 +329,15 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                     </div>
                 </div>
 
-                <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden md:overflow-hidden">
+                <div className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden xl:overflow-hidden">
                     {/* Growth: 모바일은 예전처럼 자연 높이+pb-20 / PC(md+)만 그리드 행 1fr로 열 높이 통일 */}
                     {activeTab === 'growth' && (
-                        <div className="grid min-h-0 min-w-0 grid-cols-1 gap-2 pb-20 max-md:h-auto max-md:auto-rows-auto max-md:overflow-visible md:h-full md:min-h-0 md:auto-rows-[minmax(0,1fr)] md:grid-cols-2 md:gap-3 md:overflow-hidden md:pb-0 lg:grid-cols-[5fr_5fr_3fr] lg:gap-3">
+                        <div className="grid min-h-0 min-w-0 grid-cols-1 gap-2 pb-20 max-md:h-auto max-md:auto-rows-auto max-md:overflow-visible md:grid-cols-2 md:items-stretch md:gap-3 xl:h-full xl:auto-rows-[minmax(0,1fr)] xl:grid-cols-[5fr_5fr_3fr] xl:overflow-hidden xl:pb-0 xl:gap-3">
                             {/* Column 1: Detail (+ Lunch on Tablet) */}
-                            <div className="order-1 flex min-h-0 min-w-0 flex-col gap-3 max-md:h-auto max-md:overflow-visible md:h-full md:min-h-0 md:overflow-hidden md:gap-4">
+                            <div className="order-1 flex min-h-0 min-w-0 flex-col gap-3 max-md:h-auto max-md:overflow-visible md:h-full md:gap-4 xl:h-full xl:overflow-hidden">
                                 {/* Student Detail — PC: 학생 없을 때 overflow-y-auto 제거(빈 카드 h-full 깨짐 방지). 학생 있을 때만 스크롤 */}
                                 <div
-                                    className={`max-md:flex-none max-md:overflow-visible md:min-h-0 md:flex-1 custom-scrollbar ${selectedStudent ? 'md:overflow-y-auto md:pb-24' : 'md:flex md:h-full md:flex-col md:overflow-hidden'} ${selectedStudent ? '' : 'flex min-h-0 flex-col'}`}
+                                    className={`max-md:flex-none max-md:overflow-visible md:flex-1 custom-scrollbar ${selectedStudent ? 'md:min-h-0 md:overflow-y-auto md:pb-24' : 'md:flex md:min-h-[35rem] md:h-full md:flex-col md:overflow-hidden'} ${selectedStudent ? '' : 'flex min-h-[35rem] flex-col'}`}
                                 >
                                     {selectedStudent ? (
                                         <>
@@ -363,7 +363,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                                             </div>
                                         </>
                                     ) : (
-                                        <div className="flex min-h-[10rem] max-md:flex-none flex-col items-center justify-center rounded-xl border border-base-300/60 bg-base-100 p-8 shadow-lg md:h-full md:min-h-0 md:w-full">
+                                        <div className="flex min-h-[35rem] max-md:flex-none flex-col items-center justify-center rounded-xl border border-base-300/60 bg-base-100 p-8 shadow-lg md:h-full md:min-h-[35rem] md:w-full">
                                             <h3 className="text-lg font-semibold text-base-content text-center mt-4">학생을 선택해주세요</h3>
                                             <p className="text-base-content-secondary mt-1 text-sm text-center hidden lg:block">목록에서 학생을 선택하면 상세 정보가 표시됩니다.</p>
                                         </div>
@@ -371,29 +371,33 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                                 </div>
 
                                 {/* Lunch Menu (Visible here only on Tablet 'md' but hidden on 'lg') */}
-                                <div className="hidden h-[300px] min-h-0 min-w-0 shrink-0 overflow-hidden rounded-xl md:block lg:hidden">
-                                    <LunchMenu settings={settings} />
-                                </div>
+                                <div className="hidden" />
                             </div>
 
                             {/* Column 2: Behavior Log (Center on PC, Right on Tablet) */}
-                            <div className="order-2 min-h-0 min-w-0 max-md:h-auto max-md:overflow-visible md:h-full md:min-h-0 md:overflow-hidden">
+                            <div className="order-2 min-h-0 min-w-0 max-md:h-auto max-md:overflow-visible md:h-full xl:h-full xl:overflow-hidden">
                                 {selectedStudent ? (
                                     <BehaviorLog
                                         student={selectedStudent}
                                         onAddRecord={(record) => onAddBehaviorRecord(selectedStudent.id, record)}
                                         onDeleteRecord={(recordId) => onDeleteBehaviorRecord(selectedStudent.id, recordId)}
                                         onUpdateStudent={onUpdateStudent}
+                                        settings={settings}
                                     />
                                 ) : (
-                                    <div className="flex h-full min-h-[10rem] flex-col items-center justify-center rounded-xl border border-base-300/60 bg-base-100 p-8 shadow-lg md:min-h-0">
+                                    <div className="flex h-full min-h-[35rem] flex-col items-center justify-center rounded-xl border border-base-300/60 bg-base-100 p-8 shadow-lg md:min-h-[35rem]">
                                         <p className="text-base-content-secondary mt-4 font-medium">행동 기록을 보려면 학생을 선택하세요.</p>
                                     </div>
                                 )}
                             </div>
 
+                            {/* Portrait/compact desktop: Lunch spans below student detail + behavior log */}
+                            <div className="order-3 hidden min-h-[420px] min-w-0 rounded-xl md:col-span-2 md:block xl:hidden">
+                                <LunchMenu settings={settings} />
+                            </div>
+
                             {/* Column 3: Lunch (Far Right on PC, Moved to Col 1 on Tablet) */}
-                            <div className="order-3 min-h-0 min-w-0 shrink-0 max-md:h-auto max-md:overflow-visible rounded-xl md:hidden md:overflow-hidden lg:block lg:h-full">
+                            <div className="order-3 hidden min-h-0 min-w-0 shrink-0 rounded-xl xl:block xl:h-full xl:overflow-hidden">
                                 <LunchMenu settings={settings} />
                             </div>
                         </div>
@@ -440,7 +444,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                     {/* Schedule View */}
                     {activeTab === 'schedule' && (
                         <div className="h-full">
-                            <ScheduleManager />
+                            <ScheduleManager appSettings={settings} />
                         </div>
                     )}
                 </div>

@@ -3,6 +3,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { firestore, auth } from '../firebase';
 import { ScheduleEvent, ScheduleSettings, ScheduleCategoryDef, ChecklistItem, ChecklistType, ChecklistCompletion } from '../types';
 import { useModal } from '../context/ModalContext';
+import type { AppSettings } from '../App';
+import { extractScheduleEventsFromImage } from '../services/geminiService';
+import type { ExtractedScheduleDraft } from '../services/geminiService';
 import {
     formatDateKoreanFull,
     formatWeekRangeKorean,
@@ -48,7 +51,7 @@ const COLOR_PALETTE = [
 const getTodayString = () => new Date().toLocaleDateString('en-CA');
 
 // --- Checklist Component ---
-const ITEMS_PREVIEW_COUNT = 4;
+const ITEMS_PREVIEW_COUNT = 5;
 
 const DAILY_RANK_VISIBLE_KEY = 'growup-daily-checklist-show-rank';
 
@@ -149,7 +152,7 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
     };
 
     return (
-        <div className={`${colorTheme.bg} rounded-xl p-4 border ${colorTheme.border} shadow-sm flex flex-col transition-all duration-300`}>
+        <div className={`${colorTheme.bg} h-full rounded-xl p-4 border ${colorTheme.border} shadow-sm flex flex-col transition-all duration-300`}>
             {/* Header with Expand/Collapse Toggle */}
             <div className="flex items-start justify-between gap-2 mb-3 shrink-0 min-h-8">
                 <div className="flex flex-col gap-0.5 min-w-0">
@@ -199,7 +202,7 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
             </div>
 
             {/* Items List - Dynamic Height */}
-            <div className={`overflow-y-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[800px]' : 'max-h-[250px]'} space-y-1 mb-3`}>
+            <div className={`min-h-[11.25rem] overflow-y-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[800px]' : 'max-h-[11.25rem]'} space-y-1 mb-3`}>
                 {currentItems.length > 0 ? (
                     currentItems.map(item => {
                         const globalIndex = sortedItems.findIndex(x => x.id === item.id);
@@ -713,7 +716,7 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
 };
 
 
-const ScheduleManager = (): React.ReactElement => {
+const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.ReactElement => {
     const { showAlert, showConfirm } = useModal();
     const [currentDate, setCurrentDate] = useState(new Date());
     const [events, setEvents] = useState<ScheduleEvent[]>([]);
@@ -729,6 +732,9 @@ const ScheduleManager = (): React.ReactElement => {
     const [isEventModalOpen, setIsEventModalOpen] = useState(false);
     const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+    const [isAnalyzingCapture, setIsAnalyzingCapture] = useState(false);
+    const [scheduleDrafts, setScheduleDrafts] = useState<ExtractedScheduleDraft[]>([]);
+    const [captureMessage, setCaptureMessage] = useState('');
     const [editingId, setEditingId] = useState<string | null>(null);
 
     // Form Data
@@ -836,6 +842,8 @@ const ScheduleManager = (): React.ReactElement => {
             }
             setIsEventModalOpen(false);
             resetForm();
+            setScheduleDrafts([]);
+            setCaptureMessage('');
         } catch (error) {
             console.error("Error saving schedule:", error);
             await showAlert("저장 중 오류가 발생했습니다.");
@@ -879,6 +887,8 @@ const ScheduleManager = (): React.ReactElement => {
             setEvents(prev => prev.filter(e => e.id !== editingId));
             setIsEventModalOpen(false);
             resetForm();
+            setScheduleDrafts([]);
+            setCaptureMessage('');
         } catch (error) {
             console.error("Error deleting schedule:", error);
             await showAlert("삭제 중 오류가 발생했습니다.");
@@ -924,6 +934,8 @@ const ScheduleManager = (): React.ReactElement => {
     };
 
     const openEventModal = (dateStr?: string, event?: ScheduleEvent) => {
+        setScheduleDrafts([]);
+        setCaptureMessage('');
         if (event) {
             setEditingId(event.id);
             setFormData({
@@ -943,6 +955,58 @@ const ScheduleManager = (): React.ReactElement => {
             }
         }
         setIsEventModalOpen(true);
+    };
+
+    const applyScheduleDraft = (draft: ExtractedScheduleDraft) => {
+        setFormData(prev => ({
+            ...prev,
+            date: draft.date || prev.date,
+            time: draft.time || '',
+            title: draft.title || prev.title,
+            category: settings.categories.some(c => c.label === draft.category) ? draft.category : prev.category,
+            location: draft.location || '',
+            memo: draft.memo || '',
+            isCompleted: false,
+        }));
+        setCaptureMessage(`"${draft.title}" 이렇게 등록할까요? 필요하면 아래에서 수정해 주세요.`);
+    };
+
+    const analyzeScheduleCapture = async (file: File) => {
+        if (!file.type.startsWith('image/')) {
+            await showAlert('이미지 캡처만 분석할 수 있습니다.');
+            return;
+        }
+        setIsAnalyzingCapture(true);
+        setCaptureMessage('');
+        try {
+            const drafts = await extractScheduleEventsFromImage(
+                file,
+                settings.categories.map(c => c.label),
+                formData.date || getTodayString(),
+                appSettings.geminiApiKey,
+                appSettings.geminiModel
+            );
+            setScheduleDrafts(drafts);
+            if (drafts.length === 0) {
+                setCaptureMessage('캡처에서 등록할 만한 일정을 찾지 못했습니다.');
+                return;
+            }
+            applyScheduleDraft(drafts[0]);
+        } catch (error: any) {
+            await showAlert(error.message || '캡처 분석 중 오류가 발생했습니다.');
+        } finally {
+            setIsAnalyzingCapture(false);
+        }
+    };
+
+    const handleScheduleCapturePaste = (e: React.ClipboardEvent) => {
+        if (editingId || isAnalyzingCapture) return;
+        const imageItem = Array.from(e.clipboardData.items).find(item => item.type.startsWith('image/'));
+        if (!imageItem) return;
+        const file = imageItem.getAsFile();
+        if (!file) return;
+        e.preventDefault();
+        analyzeScheduleCapture(file);
     };
 
     const resetForm = () => {
@@ -1156,18 +1220,20 @@ const ScheduleManager = (): React.ReactElement => {
     };
 
     return (
-        <div className="h-full flex flex-col gap-6 overflow-y-auto custom-scrollbar md:flex-row md:overflow-hidden">
+        <div className="h-full flex flex-col gap-6 overflow-y-auto custom-scrollbar xl:flex-row xl:overflow-hidden">
             {/* Left: Calendar (LG: 70%) — 모바일 order-1 */}
-            <div className="relative order-1 flex min-h-0 shrink-0 flex-col overflow-hidden rounded-xl border border-base-300/60 bg-base-100 shadow-lg md:order-none md:flex-[7]">
+            <div className="relative order-1 flex h-[72dvh] min-h-[520px] max-h-[900px] shrink-0 flex-col overflow-hidden rounded-xl border border-base-300/60 bg-base-100 shadow-lg xl:order-none xl:h-auto xl:max-h-none xl:min-h-0 xl:flex-[7]">
                 {/* Header */}
-                <div className="p-3 sm:p-4 border-b border-base-300 flex flex-col sm:flex-row justify-between items-center bg-base-50 shrink-0 gap-3 sm:gap-0">
+                <div className="p-3 sm:p-4 border-b border-base-300 flex flex-wrap items-center justify-between bg-base-50 shrink-0 gap-2">
                     {/* Left Group */}
-                    <div className="flex items-center justify-between w-full sm:w-auto sm:justify-start gap-2 sm:gap-4">
+                    <div className="flex min-w-0 items-center justify-between gap-2 sm:gap-4">
                         <h2 className="text-lg sm:text-xl font-bold text-base-content flex items-center gap-2 shrink-0">
                             <span className="hidden xs:inline sm:inline">일정 관리</span>
                         </h2>
+                    </div>
 
-                        <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
                             <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-base-300 shadow-sm">
                                 <button onClick={handlePrevMonth} className="p-1 hover:bg-base-100 rounded-full text-base-content-secondary">
                                     <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
@@ -1181,23 +1247,23 @@ const ScheduleManager = (): React.ReactElement => {
                                 오늘
                             </button>
                         </div>
-                    </div>
 
-                    {/* Right Group (Buttons) */}
-                    <div className="flex gap-2 w-full sm:w-auto justify-end">
+                        {/* Right Group (Buttons) */}
+                        <div className="flex flex-wrap justify-end gap-1.5">
                         <button
                             onClick={() => setIsSettingsModalOpen(true)}
-                            className="bg-white text-base-content-secondary px-3 py-2 rounded-lg font-bold border border-base-300 shadow-sm hover:bg-base-50 transition-all text-xs flex items-center justify-center gap-1 shrink-0"
+                            className="bg-white text-base-content-secondary px-2.5 py-1.5 rounded-lg font-bold border border-base-300 shadow-sm hover:bg-base-50 transition-all text-[11px] flex items-center justify-center gap-1 min-w-0"
                             title="일정 설정"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                                 <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
                             </svg>
+                            <span className="xl:hidden">설정</span>
                         </button>
                         <button
                             type="button"
                             onClick={() => setScheduleMainView('calendar')}
-                            className={`px-3 py-2 rounded-lg font-bold border shadow-sm transition-all text-xs shrink-0 ${scheduleMainView === 'calendar'
+                            className={`px-2.5 py-1.5 rounded-lg font-bold border shadow-sm transition-all text-[11px] min-w-0 ${scheduleMainView === 'calendar'
                                 ? 'bg-primary text-primary-content border-primary'
                                 : 'bg-white text-base-content-secondary border-base-300 hover:bg-base-50'
                                 }`}
@@ -1207,7 +1273,7 @@ const ScheduleManager = (): React.ReactElement => {
                         <button
                             type="button"
                             onClick={() => setScheduleMainView('checklistLog')}
-                            className={`px-3 py-2 rounded-lg font-bold border shadow-sm transition-all text-xs shrink-0 ${scheduleMainView === 'checklistLog'
+                            className={`px-2.5 py-1.5 rounded-lg font-bold border shadow-sm transition-all text-[11px] min-w-0 ${scheduleMainView === 'checklistLog'
                                 ? 'bg-primary text-primary-content border-primary'
                                 : 'bg-white text-base-content-secondary border-base-300 hover:bg-base-50'
                                 }`}
@@ -1217,23 +1283,24 @@ const ScheduleManager = (): React.ReactElement => {
                         </button>
                         <button
                             onClick={() => setIsRecurringModalOpen(true)}
-                            className="bg-white text-primary border border-primary/20 px-3 py-2 rounded-lg font-bold shadow-sm hover:bg-primary/5 transition-all text-xs flex items-center justify-center gap-1.5 shrink-0"
+                            className="bg-white text-primary border border-primary/20 px-2.5 py-1.5 rounded-lg font-bold shadow-sm hover:bg-primary/5 transition-all text-[11px] flex items-center justify-center gap-1.5 min-w-0"
                             title="고정 일정(반복) 추가"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                             </svg>
-                            <span className="hidden sm:inline">고정 일정</span>
+                            <span>고정 일정</span>
                         </button>
                         <button
                             onClick={() => openEventModal(getTodayString())}
-                            className="bg-primary text-primary-content px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-primary-focus transition-all text-sm flex items-center justify-center gap-2 flex-1 sm:flex-none"
+                            className="bg-primary text-primary-content px-3 py-1.5 rounded-lg font-bold shadow-sm hover:bg-primary-focus transition-all text-xs flex items-center justify-center gap-2 min-w-0"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                 <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
                             </svg>
                             <span className="whitespace-nowrap">일정 추가</span>
                         </button>
+                        </div>
                     </div>
                 </div>
 
@@ -1297,6 +1364,45 @@ const ScheduleManager = (): React.ReactElement => {
                         </div>
                     ) : (
                         <>
+                    <section className="border-b border-base-300 bg-base-50/80 px-3 py-3">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                            <h3 className="text-xs font-bold text-base-content">
+                                오늘 일정 <span className="font-semibold text-base-content-secondary">· {formatDateKoreanFull(new Date())}</span>
+                            </h3>
+                            {todayScheduleEvents.length === 0 ? (
+                                <p className="text-xs font-semibold text-base-content-secondary">예정된 일정이 없습니다.</p>
+                            ) : (
+                                <div className="grid min-w-0 flex-1 grid-cols-1 gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+                                    {todayScheduleEvents.slice(0, 4).map(event => (
+                                        <button
+                                            key={event.id}
+                                            type="button"
+                                            onClick={() => openEventModal(getTodayString(), event)}
+                                            className={`max-w-full rounded-lg border px-2.5 py-1.5 text-left text-xs shadow-sm transition-opacity hover:opacity-90 ${getCategoryColor(event.category)} ${event.isCompleted ? 'opacity-60 line-through' : ''}`}
+                                            title={event.title}
+                                        >
+                                            <span className="block truncate font-extrabold">{event.title}</span>
+                                            {(settings.viewOptions.showLocation && event.location) || event.memo || event.time ? (
+                                                <span className="mt-0.5 flex min-w-0 items-center justify-between gap-2 text-[10px] font-semibold opacity-75">
+                                                    <span className="min-w-0 truncate">
+                                                        {settings.viewOptions.showLocation && event.location ? event.location : event.memo}
+                                                    </span>
+                                                    {event.time && (
+                                                        <span className="shrink-0 font-mono font-black tabular-nums">{event.time}</span>
+                                                    )}
+                                                </span>
+                                            ) : null}
+                                        </button>
+                                    ))}
+                                    {todayScheduleEvents.length > 4 && (
+                                        <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-base-content-secondary border border-base-300">
+                                            +{todayScheduleEvents.length - 4}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </section>
                     {/* Day Headers - z-40 to stay above day cells (which can have z-20) */}
                     <div className="grid grid-cols-7 border-b border-base-300 bg-base-50/90 backdrop-blur-sm sticky top-0 z-[40]">
                         {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
@@ -1380,10 +1486,10 @@ const ScheduleManager = (): React.ReactElement => {
                 </div>
             </div>
 
-            {/* 모바일만: 캘린더 ↔ 일일 체크리스트 사이에 오늘 일정 요약 (PC 레이아웃·DOM은 md에서 숨김) */}
+            {/* 모바일만: 캘린더 밖에서도 오늘 일정 확인 */}
             {scheduleMainView === 'calendar' && (
                 <section
-                    className="order-2 flex shrink-0 flex-col gap-2 border-b border-base-300 bg-base-50 px-3 py-3 md:hidden"
+                    className="order-2 hidden shrink-0 flex-col gap-2 border-b border-base-300 bg-base-50 px-3 py-3"
                     aria-label="오늘 일정 요약"
                 >
                     <h3 className="text-xs font-bold text-base-content">
@@ -1420,9 +1526,9 @@ const ScheduleManager = (): React.ReactElement => {
             )}
 
             {/* Right: Checklists (LG: 30%) - iPad Fix: Added pb-32 — 모바일 order-3 */}
-            <div className="order-3 flex h-auto min-h-0 shrink-0 flex-col gap-4 pb-32 custom-scrollbar max-md:w-full md:order-none md:h-full md:flex-[3] md:overflow-y-auto md:pb-0">
+            <div className="order-3 grid h-auto min-h-0 shrink-0 grid-cols-1 gap-4 pb-32 custom-scrollbar max-md:w-full md:grid-cols-3 md:pb-20 xl:order-none xl:flex xl:h-full xl:flex-[3] xl:flex-col xl:overflow-y-auto xl:pb-0">
                 {/* Daily */}
-                <div className="shrink-0">
+                <div className="min-w-0 shrink-0">
                     <ChecklistSection
                         title="일일 체크리스트"
                         dateLabel={formatDateKoreanFull(new Date())}
@@ -1442,7 +1548,7 @@ const ScheduleManager = (): React.ReactElement => {
                     />
                 </div>
                 {/* Weekly */}
-                <div className="shrink-0">
+                <div className="min-w-0 shrink-0">
                     <ChecklistSection
                         title="주간 실천계획"
                         dateLabel={formatWeekRangeKorean(new Date())}
@@ -1461,7 +1567,7 @@ const ScheduleManager = (): React.ReactElement => {
                     />
                 </div>
                 {/* Monthly */}
-                <div className="shrink-0">
+                <div className="min-w-0 shrink-0">
                     <ChecklistSection
                         title="월간 실천계획"
                         dateLabel={formatMonthKorean(new Date())}
@@ -1488,6 +1594,7 @@ const ScheduleManager = (): React.ReactElement => {
                     <div
                         className="bg-white rounded-xl shadow-2xl w-full max-w-lg border border-base-300"
                         onClick={e => e.stopPropagation()}
+                        onPaste={handleScheduleCapturePaste}
                         onKeyDown={handleEventModalKeyDown}
                     >
                         <div className="p-6">
@@ -1503,6 +1610,47 @@ const ScheduleManager = (): React.ReactElement => {
                             </div>
 
                             <div className="space-y-4">
+                                {!editingId && (
+                                    <div
+                                        tabIndex={0}
+                                        className="rounded-xl border border-dashed border-primary/30 bg-primary/5 p-3 outline-none focus:ring-2 focus:ring-primary/30"
+                                    >
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-bold text-base-content">캡처 이미지 붙여넣기</p>
+                                                <p className="text-xs leading-snug text-base-content-secondary">
+                                                    윈도우 캡처 후 이 창에서 붙여넣으면 일정 후보를 분석합니다.
+                                                </p>
+                                            </div>
+                                            {isAnalyzingCapture && (
+                                                <svg className="h-5 w-5 animate-spin shrink-0 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                            )}
+                                        </div>
+                                        {captureMessage && (
+                                            <p className="mt-2 rounded-lg bg-white/70 px-3 py-2 text-xs font-semibold text-base-content-secondary">
+                                                {captureMessage}
+                                            </p>
+                                        )}
+                                        {scheduleDrafts.length > 1 && (
+                                            <div className="mt-2 flex flex-wrap gap-2">
+                                                {scheduleDrafts.map((draft, index) => (
+                                                    <button
+                                                        key={`${draft.date}-${draft.time}-${draft.title}-${index}`}
+                                                        type="button"
+                                                        onClick={() => applyScheduleDraft(draft)}
+                                                        className="rounded-lg border border-primary/20 bg-white px-2.5 py-1.5 text-left text-xs font-bold text-primary shadow-sm hover:bg-primary/10"
+                                                        title={draft.needsReview ? '확인이 필요한 후보' : '일정 후보 적용'}
+                                                    >
+                                                        {draft.date} {draft.time && `${draft.time} `}{draft.title}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-xs font-bold text-base-content-secondary mb-1.5">날짜</label>

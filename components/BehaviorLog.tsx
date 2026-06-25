@@ -199,7 +199,7 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
   const inputClass = "w-full p-2 text-sm border border-base-300 bg-base-200 rounded-md focus:ring-primary focus:border-primary shadow-sm focus:bg-base-100 transition-colors text-base-content";
 
   return (
-    <div className="relative flex max-md:h-auto max-md:overflow-visible flex-col overflow-hidden rounded-xl border border-base-300/60 bg-base-100 p-4 max-md:min-h-0 md:h-full">
+    <div className="relative flex max-md:h-auto max-md:overflow-visible flex-col overflow-hidden rounded-xl border border-base-300/60 bg-base-100 p-4 max-md:min-h-0 md:h-full md:min-h-0">
       {/* 1st Semester Opinion — PC·태블릿만 (모바일에서는 숨김) */}
       <div className="mb-4 hidden border border-base-300 rounded-lg bg-base-50/50 overflow-hidden md:block">
           <button 

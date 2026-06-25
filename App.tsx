@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Student } from './types';
 import Dashboard from './components/Dashboard';
 import StudentForm from './components/StudentForm';
@@ -30,6 +30,7 @@ export interface AppSettings {
 }
 
 const App = (): React.ReactElement => {
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const {
     user,
     authLoading,
@@ -60,6 +61,38 @@ const App = (): React.ReactElement => {
     handleLogout,
     schoolYearsFromData
   } = useAppLogic();
+
+  const closeHeaderMenu = () => setIsHeaderMenuOpen(false);
+
+  const handleHeaderDownloadTemplate = (e: React.MouseEvent<HTMLElement>) => {
+    closeHeaderMenu();
+    handleDownloadTemplate(e);
+  };
+
+  const handleHeaderImportClick = () => {
+    closeHeaderMenu();
+    handleImportClick();
+  };
+
+  const handleHeaderShowForm = () => {
+    closeHeaderMenu();
+    handleShowForm();
+  };
+
+  const handleHeaderNoticeClick = () => {
+    closeHeaderMenu();
+    setView('notice');
+  };
+
+  const handleHeaderSettingsClick = () => {
+    closeHeaderMenu();
+    setIsSettingsModalOpen(true);
+  };
+
+  const handleHeaderLogout = () => {
+    closeHeaderMenu();
+    handleLogout();
+  };
 
   useEffect(() => {
     document.title = '학급 성장 기록장';
@@ -124,7 +157,7 @@ const App = (): React.ReactElement => {
         className="hidden"
         accept="image/*,application/pdf"
       />
-      <header className="bg-base-100 shadow-md z-20 border-b border-base-300/70 shrink-0">
+      <header className="relative z-[80] bg-base-100 shadow-md border-b border-base-300/70 shrink-0">
         <div className="w-full px-1 sm:px-4 lg:px-6">
           <div className="flex justify-between items-center py-2 sm:py-3">
             <div className="flex items-center space-x-2 sm:space-x-3 truncate">
@@ -134,12 +167,11 @@ const App = (): React.ReactElement => {
                   <h1 className="text-lg sm:text-2xl font-bold text-base-content tracking-tight truncate flex items-center gap-1.5">
                     {settings.school && settings.grade && settings.class ? (
                       <>
-                        <span className="truncate max-w-[100px] xs:max-w-[120px] sm:max-w-none">{settings.school}</span> <span className="text-primary whitespace-nowrap text-sm sm:text-lg">{settings.grade}학년 {settings.class}반</span>
+                        <span className="truncate max-w-[130px] xs:max-w-[160px] sm:max-w-[260px] xl:max-w-none">{settings.school}</span>
+                        <span className="text-primary whitespace-nowrap text-sm sm:text-lg">{settings.grade}학년 {settings.class}반</span>
                       </>
                     ) : (
-                      <>
-                        <span className="truncate max-w-[100px] xs:max-w-[120px] sm:max-w-none">새싹 초등학교</span> <span className="text-primary whitespace-nowrap text-sm sm:text-lg">1학년 1반</span>
-                      </>
+                      <span className="truncate max-w-[180px] sm:max-w-none">학급 성장 기록장</span>
                     )}
                   </h1>
                   {settings.schoolYear && (
@@ -152,12 +184,11 @@ const App = (): React.ReactElement => {
             </div>
 
             {(view === 'dashboard' || view === 'notice') && (
-              <div className="flex items-center gap-1 sm:gap-3 shrink-0">
+              <div className="relative flex items-center gap-1 sm:gap-3 shrink-0">
+                <div className="hidden xl:flex items-center gap-1 sm:gap-3 shrink-0">
                 {view === 'dashboard' && (
                   <button
-                    onClick={handleDownloadTemplate}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    onClick={handleHeaderDownloadTemplate}
                     className="hidden lg:flex bg-green-50 text-green-700 border border-green-200 font-semibold py-1.5 px-3 rounded-lg hover:bg-green-100 focus:outline-none transition-colors duration-200 items-center space-x-2 text-sm"
                     title="학생 기초 조사서 양식 다운로드"
                   >
@@ -170,7 +201,7 @@ const App = (): React.ReactElement => {
 
                 {view === 'dashboard' && (
                   <button
-                    onClick={handleImportClick}
+                    onClick={handleHeaderImportClick}
                     title={'파일에서 학생 정보 가져오기'}
                     className="bg-base-200 text-base-content-secondary font-semibold py-1.5 px-3 rounded-lg hover:bg-base-300 focus:outline-none transition-colors duration-200 flex items-center space-x-2 text-sm hidden sm:flex"
                   >
@@ -183,7 +214,7 @@ const App = (): React.ReactElement => {
 
                 {view === 'dashboard' && (
                   <button
-                    onClick={() => handleShowForm()}
+                    onClick={handleHeaderShowForm}
                     className="hidden md:flex bg-primary text-primary-content font-bold py-1.5 px-3 rounded-lg shadow-sm hover:shadow-md hover:bg-primary-focus focus:outline-none transition-all duration-200 items-center space-x-2 text-xs sm:text-sm whitespace-nowrap justify-center"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:h-4 sm:w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -194,7 +225,7 @@ const App = (): React.ReactElement => {
                 )}
 
                 <button
-                  onClick={() => setView('notice')}
+                  onClick={handleHeaderNoticeClick}
                   className={`py-1.5 px-3 rounded-lg font-bold text-sm transition-all duration-200 shadow-sm ${view === 'notice'
                     ? 'bg-yellow-500 text-white ring-2 ring-yellow-300'
                     : 'bg-yellow-400 text-white hover:bg-yellow-500'
@@ -203,10 +234,85 @@ const App = (): React.ReactElement => {
                   <span className="hidden sm:inline">공지사항</span>
                   <span className="sm:hidden">공지</span>
                 </button>
+                </div>
 
-                <div className="flex items-center gap-1 sm:gap-2 pl-2 sm:pl-3 ml-2 sm:ml-3 border-l border-base-300">
+                <button
+                  type="button"
+                  onClick={() => setIsHeaderMenuOpen(prev => !prev)}
+                  className="xl:hidden bg-base-200 text-base-content-secondary font-bold py-1.5 px-3 rounded-lg border border-base-300 hover:bg-base-300 focus:outline-none transition-colors flex items-center gap-2 text-sm"
+                  aria-expanded={isHeaderMenuOpen}
+                  aria-controls="app-header-menu"
+                >
+                  <span>메뉴</span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className={`h-4 w-4 transition-transform ${isHeaderMenuOpen ? 'rotate-180' : ''}`}
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                </button>
+
+                {isHeaderMenuOpen && (
+                  <div
+                    id="app-header-menu"
+                    className="absolute right-0 top-full z-[100] mt-2 w-56 rounded-xl border border-base-300 bg-white p-2 shadow-xl xl:hidden"
+                  >
+                    <div className="grid grid-cols-1 gap-1">
+                      {view === 'dashboard' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleHeaderDownloadTemplate}
+                            className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-green-700 hover:bg-green-50"
+                          >
+                            <span>양식 내려받기</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleHeaderImportClick}
+                            className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-base-content-secondary hover:bg-base-100"
+                          >
+                            <span>가져오기</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleHeaderShowForm}
+                            className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-primary hover:bg-primary/10"
+                          >
+                            <span>학생 추가</span>
+                          </button>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleHeaderNoticeClick}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-yellow-700 hover:bg-yellow-50"
+                      >
+                        <span>공지사항</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleHeaderSettingsClick}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-base-content-secondary hover:bg-base-100"
+                      >
+                        <span>설정</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleHeaderLogout}
+                        className="flex items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-red-500 hover:bg-red-50"
+                      >
+                        <span>로그아웃</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="hidden xl:flex items-center gap-1 sm:gap-2 pl-2 sm:pl-3 ml-2 sm:ml-3 border-l border-base-300">
                   <button
-                    onClick={() => setIsSettingsModalOpen(true)}
+                    onClick={handleHeaderSettingsClick}
                     className="bg-transparent text-base-content-secondary p-1.5 rounded-full hover:bg-base-200 focus:outline-none transition-colors"
                     title="설정">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -219,7 +325,7 @@ const App = (): React.ReactElement => {
                     <p className="text-xs text-base-content-secondary leading-tight truncate max-w-[120px]" title={user.email}>{user.email}</p>
                   </div>
                   <button
-                    onClick={handleLogout}
+                    onClick={handleHeaderLogout}
                     className="bg-transparent text-base-content-secondary p-1.5 rounded-full hover:bg-red-100 hover:text-red-500 focus:outline-none transition-colors"
                     title="로그아웃">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">

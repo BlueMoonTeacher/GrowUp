@@ -1,9 +1,18 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { Student, BehaviorRecord, AnalysisResult, Assessment } from "../types";
+import { normalizeGeminiModel } from "../constants/geminiModels";
 
-// Default Configuration
-const DEFAULT_MODEL = 'gemini-2.5-pro';
+export interface ExtractedScheduleDraft {
+    date: string;
+    time: string;
+    title: string;
+    category: string;
+    location: string;
+    memo: string;
+    confidence?: string;
+    needsReview?: boolean;
+}
 
 // Helper to initialize AI client with dynamic key
 function getAiClient(apiKey?: string) {
@@ -183,10 +192,27 @@ const assessmentPlanSchema = {
     }
 };
 
+const scheduleDraftSchema = {
+    type: Type.ARRAY,
+    items: {
+        type: Type.OBJECT,
+        properties: {
+            date: { type: Type.STRING, description: "일정 날짜. YYYY-MM-DD 형식. 날짜가 불확실하면 기준 날짜를 넣고 needsReview를 true로 표시" },
+            time: { type: Type.STRING, description: "일정 시간. HH:mm 형식. 명확한 시간이 없으면 빈 문자열" },
+            title: { type: Type.STRING, description: "캘린더에 표시할 짧은 일정 제목" },
+            category: { type: Type.STRING, description: "제공된 분류 중 가장 가까운 분류명" },
+            location: { type: Type.STRING, description: "장소. 없으면 빈 문자열" },
+            memo: { type: Type.STRING, description: "캡처 내용 중 사용자가 나중에 참고하면 좋을 핵심 안내, 준비물, 제출처, 링크 설명, 유의사항 등을 간결하게 정리" },
+            confidence: { type: Type.STRING, description: "high, medium, low 중 하나" },
+            needsReview: { type: Type.BOOLEAN, description: "날짜, 시간, 제목 등 주요 정보가 불확실하면 true" },
+        }
+    }
+};
+
 
 export async function extractStudentInfoFromFile(file: File, apiKey?: string, model?: string): Promise<Omit<Student, 'id'>[]> {
     const ai = getAiClient(apiKey);
-    const selectedModel = model || DEFAULT_MODEL;
+    const selectedModel = normalizeGeminiModel(model);
 
     const imagePart = await fileToGenerativePart(file);
 
@@ -232,7 +258,7 @@ export async function analyzeBehaviorRecords(
     }
 
     const ai = getAiClient(apiKey);
-    const selectedModel = model || DEFAULT_MODEL;
+    const selectedModel = normalizeGeminiModel(model);
 
     // 기록 데이터를 텍스트로 변환
     const recordsText = records
@@ -296,7 +322,7 @@ export async function analyzeBehaviorRecords(
 
 export async function extractAssessmentPlanFromFile(file: File, apiKey?: string, model?: string): Promise<Omit<Assessment, 'id' | 'createdAt' | 'schoolYear'>[]> {
     const ai = getAiClient(apiKey);
-    const selectedModel = model || DEFAULT_MODEL;
+    const selectedModel = normalizeGeminiModel(model);
 
     const imagePart = await fileToGenerativePart(file);
 
@@ -348,6 +374,83 @@ export async function extractAssessmentPlanFromFile(file: File, apiKey?: string,
     }
 }
 
+export async function extractScheduleEventsFromImage(
+    file: File,
+    categories: string[],
+    referenceDate: string,
+    apiKey?: string,
+    model?: string
+): Promise<ExtractedScheduleDraft[]> {
+    const ai = getAiClient(apiKey);
+    const selectedModel = normalizeGeminiModel(model);
+    const imagePart = await fileToGenerativePart(file);
+    const availableCategories = categories.length ? categories : ['업무'];
+    const defaultCategory = availableCategories[0] || '업무';
+
+    const prompt = `
+        다음 이미지는 메신저 안내, 학교 공문, 알림장, 업무 안내 등을 캡처한 것입니다.
+        이미지에서 캘린더에 등록할 수 있는 실제 일정 후보를 추출하여 JSON 배열로 반환하세요.
+
+        [기준 날짜]
+        - 오늘 또는 사용자가 보고 있는 기준 날짜: ${referenceDate}
+        - 연도가 이미지에 없고 월/일만 있다면 기준 날짜와 같은 연도로 해석하세요.
+
+        [사용 가능한 분류]
+        ${availableCategories.join(', ')}
+
+        [추출 규칙]
+        1. AI가 바로 저장하는 용도가 아니라 사용자가 검토할 초안입니다. 불확실한 정보는 needsReview=true로 표시하세요.
+        2. 날짜가 명확하지 않으면 date에는 기준 날짜(${referenceDate})를 넣고 needsReview=true로 표시하세요.
+        3. 시간이 명확하지 않으면 time은 빈 문자열("")로 두세요. 추측으로 시간을 만들지 마세요.
+        4. title은 캘린더 칸에 보일 짧은 제목으로 작성하세요.
+        5. memo에는 "캡처 내용에서 추출됨" 같은 출처 문구를 쓰지 말고, 캡처 내용 중 보관하면 좋은 핵심 안내만 정리하세요.
+        6. 반복 일정이나 고정 일정 추론은 하지 마세요. 반복처럼 보여도 명확히 보이는 날짜별 후보만 반환하세요.
+        7. 일정으로 볼 수 있는 날짜/마감/행사/제출/회의/연수/준비 항목이 없으면 빈 배열을 반환하세요.
+        8. category는 반드시 사용 가능한 분류 중 하나로 선택하세요. 애매하면 "${defaultCategory}"를 사용하세요.
+        9. date는 YYYY-MM-DD, time은 HH:mm 형식을 지키세요.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: selectedModel,
+            contents: { parts: [imagePart, { text: prompt }] },
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: scheduleDraftSchema,
+            },
+        });
+
+        const parsed = JSON.parse(response.text || '[]');
+        const rows = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+        return rows
+            .map((row: Partial<ExtractedScheduleDraft>) => {
+                const category = row.category && availableCategories.includes(row.category)
+                    ? row.category
+                    : defaultCategory;
+                const date = typeof row.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.date)
+                    ? row.date
+                    : referenceDate;
+                const time = typeof row.time === 'string' && /^\d{2}:\d{2}$/.test(row.time)
+                    ? row.time
+                    : '';
+                return {
+                    date,
+                    time,
+                    title: (row.title || '').trim(),
+                    category,
+                    location: (row.location || '').trim(),
+                    memo: (row.memo || '').trim(),
+                    confidence: row.confidence || 'medium',
+                    needsReview: Boolean(row.needsReview || date === referenceDate && row.date !== referenceDate),
+                };
+            })
+            .filter((row: ExtractedScheduleDraft) => row.title.length > 0);
+    } catch (error) {
+        console.error("Error extracting schedule from image:", error);
+        throw new Error("캡처 이미지에서 일정을 분석하지 못했습니다.");
+    }
+}
+
 export async function generateSubjectComment(
     studentName: string,
     subject: string,
@@ -357,7 +460,7 @@ export async function generateSubjectComment(
     model?: string
 ): Promise<string> {
     const ai = getAiClient(apiKey);
-    const selectedModel = model || DEFAULT_MODEL;
+    const selectedModel = normalizeGeminiModel(model);
 
     if (!evaluations || evaluations.length === 0) {
         return "평가 결과가 없어 생성할 수 없습니다.";

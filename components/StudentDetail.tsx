@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Student, Guardian, Sibling, AfterSchoolActivity } from '../types';
 
 interface StudentDetailProps {
@@ -102,6 +102,11 @@ const HealthIcon = (): React.ReactElement => (
 );
 
 const StudentDetail = ({ student, onEdit, onDelete }: StudentDetailProps): React.ReactElement => {
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
+
+  useEffect(() => {
+    setIsMoreOpen(false);
+  }, [student.id]);
   // Filter out siblings that don't have a name (empty rows from form padding)
   const validSiblings = student.family?.siblings?.filter(s => s.name && s.name.trim() !== '') || [];
   const GUARDIAN_ORDER: { [key: string]: number } = { '모': 1, '부': 2 };
@@ -259,44 +264,59 @@ const StudentDetail = ({ student, onEdit, onDelete }: StudentDetailProps): React
         </div>
       </InfoCard>
 
-      <InfoCard title="방과 후 활동 및 흥미" icon={<ActivityIcon />}>
-        <div className="space-y-4">
-          <div>
-            <h4 className="text-xs font-bold text-base-content-secondary mb-2 uppercase tracking-wider">활동 목록</h4>
-            {(student.afterSchool?.activities?.filter(a => a.name).length ?? 0) > 0 ? (
-              <div className="space-y-1.5">
-                {student.afterSchool.activities.filter(a => a.name).map((a: AfterSchoolActivity, i: number) => (
-                  <div key={i} className="px-3 py-2 bg-base-200 rounded-md border border-base-300/70 flex justify-between items-center text-sm">
-                    <div>
-                      <span className="font-bold text-base-content">{a.name}</span>
-                      {a.subject && <span className="text-base-content-secondary text-xs ml-1">({a.subject})</span>}
-                    </div>
-                    <span className="text-xs text-base-content-secondary bg-base-100 px-2 py-1 rounded-md border border-base-300 max-w-[120px] truncate">
-                      {a.schedule}
-                    </span>
+      <button
+        type="button"
+        onClick={() => setIsMoreOpen(prev => !prev)}
+        className="w-full rounded-xl border border-base-300 bg-white px-4 py-3 text-sm font-bold text-base-content-secondary shadow-sm transition-colors hover:bg-base-50 flex items-center justify-between"
+      >
+        <span>{isMoreOpen ? '추가 정보 접기' : '추가 정보 더보기'}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform ${isMoreOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
+          <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+        </svg>
+      </button>
+
+      {isMoreOpen && (
+        <div className="space-y-5">
+          <InfoCard title="방과 후 활동 및 흥미" icon={<ActivityIcon />}>
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-xs font-bold text-base-content-secondary mb-2 uppercase tracking-wider">활동 목록</h4>
+                {(student.afterSchool?.activities?.filter(a => a.name).length ?? 0) > 0 ? (
+                  <div className="space-y-1.5">
+                    {student.afterSchool.activities.filter(a => a.name).map((a: AfterSchoolActivity, i: number) => (
+                      <div key={i} className="px-3 py-2 bg-base-200 rounded-md border border-base-300/70 flex justify-between items-center text-sm">
+                        <div>
+                          <span className="font-bold text-base-content">{a.name}</span>
+                          {a.subject && <span className="text-base-content-secondary text-xs ml-1">({a.subject})</span>}
+                        </div>
+                        <span className="text-xs text-base-content-secondary bg-base-100 px-2 py-1 rounded-md border border-base-300 max-w-[120px] truncate">
+                          {a.schedule}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                ) : <p className="text-base-content-secondary text-xs italic px-2">기록된 활동이 없습니다.</p>}
               </div>
-            ) : <p className="text-base-content-secondary text-xs italic px-2">기록된 활동이 없습니다.</p>}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            <InfoItem label="좋아하는 것" value={student.afterSchool?.likes} />
-            <InfoItem label="싫어하는 것" value={student.afterSchool?.dislikes} />
-          </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <InfoItem label="좋아하는 것" value={student.afterSchool?.likes} />
+                <InfoItem label="싫어하는 것" value={student.afterSchool?.dislikes} />
+              </div>
+            </div>
+          </InfoCard>
+
+          <InfoCard title="학습 상태" icon={<DocumentIcon />}>
+            <p className="whitespace-pre-wrap text-base-content text-sm leading-relaxed">{student.learningStatus || '-'}</p>
+          </InfoCard>
+
+          <InfoCard title="건강 상태" icon={<HealthIcon />}>
+            <p className="whitespace-pre-wrap text-base-content text-sm leading-relaxed">{student.healthStatus || '-'}</p>
+          </InfoCard>
+
+          <InfoCard title="학부모 요청사항" icon={<DocumentIcon />}>
+            <p className="whitespace-pre-wrap text-base-content text-sm leading-relaxed">{student.parentRequests || '-'}</p>
+          </InfoCard>
         </div>
-      </InfoCard>
-
-      <InfoCard title="학습 상태" icon={<DocumentIcon />}>
-        <p className="whitespace-pre-wrap text-base-content text-sm leading-relaxed">{student.learningStatus || '-'}</p>
-      </InfoCard>
-
-      <InfoCard title="건강 상태" icon={<HealthIcon />}>
-        <p className="whitespace-pre-wrap text-base-content text-sm leading-relaxed">{student.healthStatus || '-'}</p>
-      </InfoCard>
-
-      <InfoCard title="학부모 요청사항" icon={<DocumentIcon />}>
-        <p className="whitespace-pre-wrap text-base-content text-sm leading-relaxed">{student.parentRequests || '-'}</p>
-      </InfoCard>
+      )}
     </div>
   );
 };

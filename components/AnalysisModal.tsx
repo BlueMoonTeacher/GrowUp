@@ -315,7 +315,7 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[120] p-4" onClick={onClose}>
       <div className="bg-base-100 rounded-2xl shadow-2xl w-full max-w-[90vw] h-[90vh] flex flex-col overflow-hidden border border-base-300" onClick={e => e.stopPropagation()}>
         
         {/* Header */}

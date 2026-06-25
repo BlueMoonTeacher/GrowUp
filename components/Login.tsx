@@ -71,7 +71,7 @@ const Login = (): React.ReactElement => {
         </div>
 
         <h1 className="text-3xl font-bold text-base-content mb-2 tracking-tight">학급 성장 기록장</h1>
-        <p className="text-base-content-secondary mb-8">시작하려면 구글 계정으로 로그인해주세요.</p>
+        <p className="text-base-content-secondary mb-8">Google 로그인 시 개별 사용 모드로 이용됩니다.</p>
 
         {isLoading ? (
           <div className="flex flex-col items-center justify-center space-y-4 py-4">

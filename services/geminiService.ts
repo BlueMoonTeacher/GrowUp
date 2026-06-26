@@ -176,7 +176,7 @@ const assessmentPlanSchema = {
         properties: {
             subject: { type: Type.STRING, description: "교과 (예: 국어, 수학, 사회, 과학, 영어 등). 표의 셀이 병합되어 비어있다면 바로 윗 행의 교과명을 상속받아야 함." },
             semester: { type: Type.STRING, description: "학기 (문서 제목의 '1학기' 또는 '2학기' 텍스트를 통해 1 또는 2로 추출)" },
-            domain: { type: Type.STRING, description: "평가 영역 (단원명이나 영역 컬럼, 예: 읽기, 쓰기)" },
+            domain: { type: Type.STRING, description: "평가 영역. 표에 '단원'과 '영역' 열이 모두 있으면 반드시 '영역' 열의 값만 사용 (예: 문학, 듣기·말하기, 평화 통일을 위한 노력, 민주화와 산업화)" },
             timing: { type: Type.STRING, description: "평가 시기 (예: 4월, 5월, 3~7월, 수시 등). 시기, 기간, 월 등의 컬럼에서 추출." },
             achievementStandard: { type: Type.STRING, description: "성취기준 코드 및 내용 (예: [6국01-02] 의견을 제시하고...)" },
             evaluationElement: { type: Type.STRING, description: "평가요소 (구체적인 활동 내용)" },
@@ -339,7 +339,13 @@ export async function extractAssessmentPlanFromFile(file: File, apiKey?: string,
            - 문서의 상단 제목(예: "2025학년도 5학년 2학기 수행평가 계획")을 확인하여 '1'학기인지 '2'학기인지 파악하고 'semester' 필드에 "1" 또는 "2"를 넣으세요.
            - 제목에 학기 정보가 없다면 '시기' 열을 보고 추론하세요 (3~7월: 1학기, 8~12월: 2학기).
         
-        3. **데이터 추출**: 각 행마다 다음 항목을 추출하세요.
+        3. **올해 평가 계획 표 형식 처리**:
+           - 표가 '교과 / 성취기준 / 단원 / 영역 / 평가요소 / ①수업 방법, ②평가 방법, ③수업·평가 연계의 주안점 / 평가기준 / 시기' 형태라면 각 열의 제목을 기준으로 읽으세요.
+           - domain은 반드시 '영역' 열의 값을 사용하세요. '단원' 열의 값(예: "1. 평화 통일을 위한 노력, 민주화와 산업화")을 domain으로 넣지 마세요.
+           - 영역명이 여러 줄로 나뉘어 보이면 자연스러운 한글 띄어쓰기로 복원하세요. 단어 중간에서 줄이 바뀐 경우에는 불필요한 공백을 넣지 마세요.
+           - evaluationElement는 '평가요소' 열의 값을 사용하고, 수업 방법/평가 방법/주안점 내용과 섞지 마세요.
+        
+        4. **데이터 추출**: 각 행마다 다음 항목을 추출하세요.
            - subject: 교과 (병합된 경우 위 행 값 상속)
            - semester: 학기 (문서 제목 기준)
            - domain: 평가 영역 (단원명이나 영역 컬럼, 예: 읽기, 쓰기)

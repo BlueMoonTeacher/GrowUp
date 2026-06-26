@@ -107,6 +107,7 @@ const AssessmentPreviewModal = ({
     };
 
     const inputClass = "w-full text-center bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary rounded h-7 text-sm";
+    const domainInputClass = "w-full min-h-[3.5rem] resize-none overflow-hidden text-center bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1 text-sm leading-tight [align-content:center]";
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -117,9 +118,9 @@ const AssessmentPreviewModal = ({
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
             <div 
-                className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col border border-base-300" 
+                className="bg-white rounded-xl shadow-2xl w-full max-w-[min(96vw,1400px)] max-h-[90vh] flex flex-col border border-base-300" 
                 onClick={e => e.stopPropagation()}
                 onKeyDown={handleKeyDown}
             >
@@ -137,13 +138,13 @@ const AssessmentPreviewModal = ({
                         💡 AI가 추출한 내용을 확인하세요. <strong>교과, 학기, 내용</strong>이 올바르지 않다면 직접 수정할 수 있습니다. <br/>
                         확인이 완료되면 우측 하단의 <strong>'저장하기'</strong> 버튼을 눌러주세요. (Enter)
                     </div>
-                    <table className="w-full text-sm border-collapse">
+                    <table className="w-full min-w-[1120px] text-sm border-collapse table-fixed">
                         <thead>
-                            <tr className="bg-base-200 text-left text-gray-700 font-bold sticky top-0 z-10">
+                            <tr className="bg-base-200 text-left text-gray-700 font-bold">
                                 <th className="p-2 border w-12 text-center">학기</th>
                                 <th className="p-2 border w-16 text-center">시기</th>
                                 <th className="p-2 border w-24 text-center">교과</th>
-                                <th className="p-2 border w-32 text-center">영역</th>
+                                <th className="p-2 border w-56 text-center">영역</th>
                                 <th className="p-2 border">평가요소 / 성취기준</th>
                                 <th className="p-2 border w-12 text-center">삭제</th>
                             </tr>
@@ -173,11 +174,12 @@ const AssessmentPreviewModal = ({
                                             className={`${inputClass} text-gray-900`}
                                         />
                                     </td>
-                                    <td className="p-1 border bg-white">
-                                        <input 
+                                    <td className="p-1 border bg-white align-top">
+                                        <textarea 
                                             value={item.domain} 
                                             onChange={e => handleChange(index, 'domain', e.target.value)} 
-                                            className={`${inputClass} text-gray-900`}
+                                            className={domainInputClass}
+                                            rows={2}
                                         />
                                     </td>
                                     <td className="p-1 border bg-white">
@@ -638,6 +640,21 @@ const EvaluationEntry = ({
         return { h, m, l, n, total: students.length, done: h+m+l };
     }, [currentEvaluations, unsavedChanges, students]);
 
+    const studentSections = useMemo(() => {
+        const boys = students.filter(s => String(s.gender || '').trim().startsWith('남'));
+        const girls = students.filter(s => String(s.gender || '').trim().startsWith('여'));
+        const others = students.filter(s => {
+            const gender = String(s.gender || '').trim();
+            return !gender || (!gender.startsWith('남') && !gender.startsWith('여'));
+        });
+
+        return [
+            { title: '남학생', students: boys },
+            { title: '여학생', students: girls },
+            ...(others.length > 0 ? [{ title: '성별 미지정', students: others }] : [])
+        ].filter(section => section.students.length > 0);
+    }, [students]);
+
     const handleLevelChange = (studentId: string, newLevel: EvaluationLevel) => {
         setUnsavedChanges(prev => {
             // Toggle logic: if clicking the same level as currently selected (draft or saved), clear it (set to 'none')
@@ -753,20 +770,27 @@ const EvaluationEntry = ({
 
                 {/* Row 2: Domain & Assessment Selectors */}
                 {subjects.length > 0 && (
-                    <div className="flex flex-col sm:flex-row gap-3">
-                        <div className="flex flex-col gap-1 w-full sm:w-1/4 min-w-[150px]">
+                    <div className="grid grid-cols-1 xl:grid-cols-[minmax(260px,auto)_minmax(0,1fr)] gap-3 items-end">
+                        <div className="flex flex-col gap-1 min-w-0">
                             <label className="text-xs font-bold text-gray-500 ml-1">영역</label>
-                            <select 
-                                className="w-full p-2.5 rounded-lg border border-base-300 bg-white text-sm font-bold focus:ring-2 focus:ring-primary"
-                                value={selectedDomain}
-                                onChange={e => setSelectedDomain(e.target.value)}
-                            >
+                            <div className="flex flex-wrap gap-2">
                                 {domains.map(d => (
-                                    <option key={d} value={d}>{d}</option>
+                                    <button
+                                        key={d}
+                                        type="button"
+                                        onClick={() => setSelectedDomain(d)}
+                                        className={`px-3 py-1.5 rounded-lg border text-xs font-bold transition-all ${
+                                            selectedDomain === d
+                                                ? 'bg-primary text-primary-content border-primary shadow-sm'
+                                                : 'bg-white text-gray-600 border-base-300 hover:border-primary/50 hover:bg-green-50'
+                                        }`}
+                                    >
+                                        {d}
+                                    </button>
                                 ))}
-                            </select>
+                            </div>
                         </div>
-                        <div className="flex flex-col gap-1 flex-1">
+                        <div className="flex flex-col gap-1 min-w-0">
                             <label className="text-xs font-bold text-gray-500 ml-1">성취기준 / 평가요소</label>
                             <select 
                                 className="w-full p-2.5 rounded-lg border border-base-300 bg-white text-sm font-bold focus:ring-2 focus:ring-primary"
@@ -797,105 +821,110 @@ const EvaluationEntry = ({
                             <button onClick={() => handleBatchLocalUpdate('none')} className="px-3 py-1 bg-gray-100 text-gray-600 text-xs font-bold rounded border border-gray-300 hover:bg-gray-200 transition-colors whitespace-nowrap">전체 초기화</button>
                         </div>
 
-                        {/* iPad Fix: Added pb-40 to table scroll */}
-                        <div className="flex-1 overflow-auto custom-scrollbar relative bg-white pb-40">
-                            <table className="w-full text-sm min-w-[500px]">
-                                <thead className="bg-base-100 sticky top-0 z-10 font-bold text-base-content border-b border-base-200 shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-                                    <tr>
-                                        <th className="p-3 w-16 text-center whitespace-nowrap bg-base-100">번호</th>
-                                        <th className="p-3 w-24 text-center whitespace-nowrap bg-base-100">이름</th>
-                                        <th className="p-3 text-center whitespace-nowrap bg-base-100">평가 (잘함 / 보통 / 노력요함 / 미실시)</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-base-100">
-                                    {students.map(student => {
-                                        const level = getLevel(student.id);
-                                        const isChanged = unsavedChanges[student.id] !== undefined;
-                                        
-                                        return (
-                                            <tr key={student.id} className={`hover:bg-base-50 transition-colors ${isChanged ? 'bg-blue-50/30' : ''}`}>
-                                                <td className="p-3 text-center font-bold text-gray-500">{student.number}</td>
-                                                <td className="p-3 text-center font-bold text-lg text-gray-800 whitespace-nowrap">
-                                                    {student.name.hangul}
-                                                    {isChanged && <span className="text-[10px] text-blue-500 ml-1">●</span>}
-                                                </td>
-                                                <td className="p-2 text-center">
-                                                    <div className="flex justify-center gap-1 mx-auto max-w-[320px]">
-                                                        {(['high', 'middle', 'low'] as const).map(lvl => (
+                        <div className="flex-1 overflow-auto custom-scrollbar relative bg-white p-3 pb-40">
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                                {studentSections.map(section => {
+                                    const sectionTone = section.title === '남학생'
+                                        ? 'border-blue-200 bg-blue-50 text-blue-950'
+                                        : section.title === '여학생'
+                                            ? 'border-rose-200 bg-rose-50 text-rose-950'
+                                            : 'border-gray-300 bg-gray-50 text-gray-800';
+
+                                    return (
+                                    <div key={section.title} className={`rounded-xl border bg-white overflow-hidden shadow-sm ${sectionTone.split(' ').find(c => c.startsWith('border-')) || 'border-gray-300'}`}>
+                                        <div className={`flex items-center justify-between px-3 py-2 border-b ${sectionTone}`}>
+                                            <span className="text-sm font-bold text-base-content">{section.title}</span>
+                                            <span className="text-[11px] font-bold text-base-content-secondary">{section.students.length}명</span>
+                                        </div>
+                                        <div className="grid grid-cols-1 2xl:grid-cols-2 bg-white">
+                                            {section.students.map(student => {
+                                                const level = getLevel(student.id);
+                                                const isChanged = unsavedChanges[student.id] !== undefined;
+
+                                                return (
+                                                    <div key={student.id} className={`grid grid-cols-[2rem_minmax(3rem,1fr)_auto] items-center gap-1.5 px-2 py-1.5 border-b border-gray-200 odd:bg-white even:bg-gray-50/50 2xl:odd:border-r 2xl:odd:border-r-gray-200 2xl:[&:nth-last-child(-n+2)]:border-b-0 transition-colors hover:bg-green-50 ${isChanged ? '!bg-blue-50' : ''}`}>
+                                                        <div className="text-center text-xs font-bold text-gray-500">{student.number}</div>
+                                                        <div className="truncate text-sm font-bold text-gray-800">
+                                                            {student.name.hangul}
+                                                            {isChanged && <span className="text-[9px] text-blue-500 ml-1">●</span>}
+                                                        </div>
+                                                        <div className="flex justify-end gap-0.5">
+                                                            {(['high', 'middle', 'low'] as const).map(lvl => (
+                                                                <button
+                                                                    type="button"
+                                                                    key={lvl}
+                                                                    onClick={() => handleLevelChange(student.id, lvl)}
+                                                                    className={`w-9 h-7 rounded-md border transition-all font-bold text-[10px] shadow-sm ${
+                                                                        level === lvl 
+                                                                        ? lvl === 'high' ? 'bg-green-500 text-white border-green-600 ring-1 ring-green-200'
+                                                                        : lvl === 'middle' ? 'bg-yellow-400 text-white border-yellow-500 ring-1 ring-yellow-200'
+                                                                        : 'bg-red-400 text-white border-red-500 ring-1 ring-red-200'
+                                                                        : 'bg-white text-gray-500 border-base-300 hover:bg-base-100 hover:text-gray-700'
+                                                                    }`}
+                                                                >
+                                                                    {lvl === 'high' ? '잘함' : lvl === 'middle' ? '보통' : '노력'}
+                                                                </button>
+                                                            ))}
                                                             <button
                                                                 type="button"
-                                                                key={lvl}
-                                                                onClick={() => handleLevelChange(student.id, lvl)}
-                                                                className={`w-14 h-8 rounded-lg border transition-all font-bold text-xs shadow-sm ${
-                                                                    level === lvl 
-                                                                    ? lvl === 'high' ? 'bg-green-500 text-white border-green-600 ring-2 ring-green-200'
-                                                                    : lvl === 'middle' ? 'bg-yellow-400 text-white border-yellow-500 ring-2 ring-yellow-200'
-                                                                    : 'bg-red-400 text-white border-red-500 ring-2 ring-red-200'
-                                                                    : 'bg-white text-gray-500 border-base-300 hover:bg-base-100 hover:text-gray-700'
+                                                                onClick={() => handleLevelChange(student.id, 'none')}
+                                                                className={`w-10 h-7 rounded-md border transition-all font-bold text-[10px] shadow-sm ${
+                                                                    level === 'none' || !level
+                                                                    ? 'bg-gray-500 text-white border-gray-600 ring-1 ring-gray-300'
+                                                                    : 'bg-white text-gray-400 border-base-300 hover:bg-gray-50 hover:text-gray-600'
                                                                 }`}
+                                                                title="평가 미실시"
                                                             >
-                                                                {lvl === 'high' ? '잘함' : lvl === 'middle' ? '보통' : '노력'}
+                                                                미실시
                                                             </button>
-                                                        ))}
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleLevelChange(student.id, 'none')}
-                                                            className={`w-14 h-8 rounded-lg border transition-all font-bold text-xs shadow-sm ${
-                                                                level === 'none' || !level
-                                                                ? 'bg-gray-500 text-white border-gray-600 ring-2 ring-gray-300'
-                                                                : 'bg-white text-gray-400 border-base-300 hover:bg-gray-50 hover:text-gray-600'
-                                                            }`}
-                                                            title="평가 미실시"
-                                                        >
-                                                            미실시
-                                                        </button>
+                                                        </div>
                                                     </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
-                                </tbody>
-                            </table>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
 
-                    <div className="w-full lg:w-80 flex flex-col gap-4 overflow-y-auto custom-scrollbar shrink-0 pb-40">
+                    <div className="w-full lg:w-80 flex flex-col gap-3 overflow-y-auto custom-scrollbar shrink-0 min-h-0 pb-40 lg:pb-0">
                          {/* Stats Panel */}
-                         <div className="bg-white p-4 rounded-xl border border-base-300 shadow-sm">
-                             <h4 className="font-bold mb-3 text-base-content-secondary flex justify-between">
-                                 진행 현황 <span className="text-[10px] font-normal text-gray-400 self-center">(저장 전 상태 포함)</span>
+                         <div className="bg-white p-3 rounded-xl border border-base-300 shadow-sm shrink-0">
+                             <h4 className="font-bold mb-2 text-sm text-base-content-secondary flex justify-between">
+                                 진행 현황 <span className="text-[10px] font-normal text-gray-400 self-center">{stats.done}/{stats.total}명</span>
                              </h4>
                              <div className="flex items-center gap-2 mb-2">
-                                 <div className="flex-1 h-3 bg-base-200 rounded-full overflow-hidden">
+                                 <div className="flex-1 h-2 bg-base-200 rounded-full overflow-hidden">
                                      <div className="h-full bg-primary" style={{ width: `${(stats.done / stats.total) * 100}%` }}></div>
                                  </div>
-                                 <span className="text-xs font-bold text-gray-700">{stats.done}/{stats.total}명</span>
                              </div>
-                             <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                                 <div className="bg-green-50 p-2 rounded border border-green-100">
-                                     <div className="font-bold text-green-700">{stats.h}</div>
-                                     <div className="text-green-600">잘함</div>
+                             <div className="grid grid-cols-4 gap-1.5 text-center text-[10px]">
+                                 <div className="bg-green-50 py-1.5 rounded border border-green-100">
+                                     <div className="font-bold text-green-700 leading-none">{stats.h}</div>
+                                     <div className="text-green-600 mt-0.5">잘함</div>
                                  </div>
-                                 <div className="bg-yellow-50 p-2 rounded border border-yellow-100">
-                                     <div className="font-bold text-yellow-700">{stats.m}</div>
-                                     <div className="text-yellow-600">보통</div>
+                                 <div className="bg-yellow-50 py-1.5 rounded border border-yellow-100">
+                                     <div className="font-bold text-yellow-700 leading-none">{stats.m}</div>
+                                     <div className="text-yellow-600 mt-0.5">보통</div>
                                  </div>
-                                 <div className="bg-red-50 p-2 rounded border border-red-100">
-                                     <div className="font-bold text-red-700">{stats.l}</div>
-                                     <div className="text-red-600">노력</div>
+                                 <div className="bg-red-50 py-1.5 rounded border border-red-100">
+                                     <div className="font-bold text-red-700 leading-none">{stats.l}</div>
+                                     <div className="text-red-600 mt-0.5">노력</div>
                                  </div>
-                                 <div className="bg-gray-100 p-2 rounded border border-gray-200">
-                                     <div className="font-bold text-gray-700">{stats.n}</div>
-                                     <div className="text-gray-500">미실시</div>
+                                 <div className="bg-gray-100 py-1.5 rounded border border-gray-200">
+                                     <div className="font-bold text-gray-700 leading-none">{stats.n}</div>
+                                     <div className="text-gray-500 mt-0.5">미실시</div>
                                  </div>
                              </div>
                          </div>
 
-                         <div className="bg-base-50 p-4 rounded-xl border border-base-300 shadow-inner flex-1 min-h-[200px]">
+                         <div className="bg-white p-4 rounded-xl border border-base-300 shadow-sm overflow-hidden flex-1 min-h-[220px] flex flex-col">
                              <h4 className="font-bold mb-3 text-base-content flex items-center gap-2">
                                  <span>ℹ️</span> 평가 기준
                              </h4>
-                             <div className="space-y-3 text-sm h-full overflow-y-auto custom-scrollbar pr-1">
+                             <div className="space-y-2 text-xs flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 pb-8">
                                  {selectedAssessment.timing && (
                                      <div className="mb-2 pb-2 border-b border-base-200">
                                          <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-0.5 rounded">평가 시기</span>
@@ -904,15 +933,15 @@ const EvaluationEntry = ({
                                  )}
                                  <div>
                                      <span className="text-xs font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded">잘함</span>
-                                     <p className="mt-1 p-2 bg-white rounded border border-base-200 text-gray-800 leading-relaxed">{selectedAssessment.criteria.high || '-'}</p>
+                                     <p className="mt-1 p-2 bg-green-50/60 rounded border border-green-100 text-gray-800 leading-relaxed whitespace-pre-wrap">{selectedAssessment.criteria.high || '-'}</p>
                                  </div>
                                  <div>
                                      <span className="text-xs font-bold bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">보통</span>
-                                     <p className="mt-1 p-2 bg-white rounded border border-base-200 text-gray-800 leading-relaxed">{selectedAssessment.criteria.middle || '-'}</p>
+                                     <p className="mt-1 p-2 bg-yellow-50/60 rounded border border-yellow-100 text-gray-800 leading-relaxed whitespace-pre-wrap">{selectedAssessment.criteria.middle || '-'}</p>
                                  </div>
                                  <div>
                                      <span className="text-xs font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded">노력요함</span>
-                                     <p className="mt-1 p-2 bg-white rounded border border-base-200 text-gray-800 leading-relaxed">{selectedAssessment.criteria.low || '-'}</p>
+                                     <p className="mt-1 p-2 bg-red-50/60 rounded border border-red-100 text-gray-800 leading-relaxed whitespace-pre-wrap">{selectedAssessment.criteria.low || '-'}</p>
                                  </div>
                              </div>
                          </div>

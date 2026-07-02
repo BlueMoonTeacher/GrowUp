@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { firestore, auth } from '../firebase';
-import { ScheduleEvent, ScheduleSettings, ScheduleCategoryDef, ChecklistItem, ChecklistType, ChecklistCompletion } from '../types';
+import { firestore, auth, storage } from '../firebase';
+import { ScheduleEvent, ScheduleSettings, ScheduleCategoryDef, ChecklistItem, ChecklistType, ChecklistCompletion, ScheduleAttachment } from '../types';
 import { useModal } from '../context/ModalContext';
 import type { AppSettings } from '../App';
 import { extractScheduleEventsFromImage } from '../services/geminiService';
@@ -51,7 +51,27 @@ const COLOR_PALETTE = [
 const getTodayString = () => new Date().toLocaleDateString('en-CA');
 
 // --- Checklist Component ---
-const ITEMS_PREVIEW_COUNT = 5;
+const ITEMS_PREVIEW_COUNT: Record<ChecklistType, number> = {
+    daily: 8,
+    weekly: 7,
+    monthly: 7,
+};
+
+const getEventTimeLabel = (event: Pick<ScheduleEvent, 'time' | 'endTime'>) => {
+    if (!event.time) return '';
+    return event.endTime ? `${event.time}–${event.endTime}` : event.time;
+};
+
+interface PendingScheduleImage {
+    id: string;
+    file: File;
+    previewUrl: string;
+}
+
+interface ScheduleImagePreview {
+    url: string;
+    name: string;
+}
 
 const DAILY_RANK_VISIBLE_KEY = 'growup-daily-checklist-show-rank';
 
@@ -127,8 +147,9 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
         return items;
     }, [items, enableDailyOrder]);
 
-    const hasMoreItems = sortedItems.length > ITEMS_PREVIEW_COUNT;
-    const currentItems = isExpanded || !hasMoreItems ? sortedItems : sortedItems.slice(0, ITEMS_PREVIEW_COUNT);
+    const previewCount = ITEMS_PREVIEW_COUNT[type];
+    const hasMoreItems = sortedItems.length > previewCount;
+    const currentItems = isExpanded || !hasMoreItems ? sortedItems : sortedItems.slice(0, previewCount);
 
     const applyReorder = useCallback((from: number, to: number) => {
         if (!dailyOrdering?.onReorder || from === to) return;
@@ -145,14 +166,14 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
             onAdd(type, newItemText.trim());
             setNewItemText('');
             // Automatically expand when adding new items if it exceeds the preview count
-            if (!isExpanded && sortedItems.length >= ITEMS_PREVIEW_COUNT) {
+            if (!isExpanded && sortedItems.length >= previewCount) {
                 setIsExpanded(true);
             }
         }
     };
 
     return (
-        <div className={`${colorTheme.bg} h-full rounded-xl p-4 border ${colorTheme.border} shadow-sm flex flex-col transition-all duration-300`}>
+        <div className={`${colorTheme.bg} schedule-checklist-card h-full rounded-xl p-4 border ${colorTheme.border} shadow-sm flex flex-col transition-all duration-300`}>
             {/* Header with Expand/Collapse Toggle */}
             <div className="flex items-start justify-between gap-2 mb-3 shrink-0 min-h-8">
                 <div className="flex flex-col gap-0.5 min-w-0">
@@ -187,7 +208,7 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
                                 }
                             `}
                         >
-                            <span>{isExpanded ? '접기' : `+${sortedItems.length - ITEMS_PREVIEW_COUNT} 더보기`}</span>
+                            <span>{isExpanded ? '접기' : `+${sortedItems.length - previewCount} 더보기`}</span>
                             <svg
                                 xmlns="http://www.w3.org/2000/svg"
                                 className={`h-3 w-3 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
@@ -202,7 +223,7 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
             </div>
 
             {/* Items List - Dynamic Height */}
-            <div className={`min-h-[11.25rem] overflow-y-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[800px]' : 'max-h-[11.25rem]'} space-y-1 mb-3`}>
+            <div className={`schedule-checklist-list min-h-[15rem] overflow-y-auto custom-scrollbar transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[800px]' : 'max-h-[19rem]'} space-y-1 mb-3 pr-0.5`}>
                 {currentItems.length > 0 ? (
                     currentItems.map(item => {
                         const globalIndex = sortedItems.findIndex(x => x.id === item.id);
@@ -467,6 +488,8 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
     const [category, setCategory] = useState(categories[0]?.label || '업무');
     const [location, setLocation] = useState('');
     const [time, setTime] = useState('14:00');
+    const [hasEndTime, setHasEndTime] = useState(false);
+    const [endTime, setEndTime] = useState('15:00');
     const [memo, setMemo] = useState('');
 
     const [startDate, setStartDate] = useState(getTodayString());
@@ -495,6 +518,10 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
             alert("종료일은 시작일보다 뒤여야 합니다.");
             return;
         }
+        if (hasEndTime && (!time || !endTime || endTime <= time)) {
+            alert("종료시간은 시작시간보다 뒤여야 합니다.");
+            return;
+        }
 
         setIsSaving(true);
         const eventsToCreate: Omit<ScheduleEvent, 'id'>[] = [];
@@ -520,6 +547,7 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                     category,
                     location,
                     time,
+                    endTime: hasEndTime ? endTime : '',
                     memo,
                     isCompleted: false
                 });
@@ -573,8 +601,8 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                                 className="w-full p-2.5 bg-white border border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm font-bold"
                             />
                         </div>
-                        <div>
-                            <label className="block text-xs font-bold text-base-content-secondary mb-1.5">시간</label>
+                        <div className={hasEndTime ? '' : 'col-span-1'}>
+                            <label className="block text-xs font-bold text-base-content-secondary mb-1.5">시작시간</label>
                             <input
                                 type="time"
                                 value={time}
@@ -583,13 +611,27 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                             />
                         </div>
                         <div>
+                            {hasEndTime ? (
+                                <>
+                                    <label className="block text-xs font-bold text-base-content-secondary mb-1.5">종료시간</label>
+                                    <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="w-full p-2.5 bg-white border border-base-300 rounded-lg text-sm" />
+                                </>
+                            ) : (
+                                <label className="flex h-full min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-base-200 bg-base-50 px-3 text-xs font-bold text-base-content-secondary">
+                                    <input type="checkbox" checked={hasEndTime} onChange={(e) => setHasEndTime(e.target.checked)} className="checkbox checkbox-sm" />
+                                    종료시간도 입력
+                                </label>
+                            )}
+                        </div>
+                        {hasEndTime && (
+                            <label className="col-span-2 flex cursor-pointer items-center gap-2 text-xs font-bold text-base-content-secondary">
+                                <input type="checkbox" checked={hasEndTime} onChange={(e) => setHasEndTime(e.target.checked)} className="checkbox checkbox-sm" />
+                                종료시간 사용
+                            </label>
+                        )}
+                        <div className="col-span-2">
                             <label className="block text-xs font-bold text-base-content-secondary mb-1.5">장소</label>
-                            <input
-                                type="text"
-                                value={location}
-                                onChange={(e) => setLocation(e.target.value)}
-                                className="w-full p-2.5 bg-white border border-base-300 rounded-lg text-sm"
-                            />
+                            <input type="text" value={location} onChange={(e) => setLocation(e.target.value)} className="w-full p-2.5 bg-white border border-base-300 rounded-lg text-sm" />
                         </div>
                         <div className="col-span-2">
                             <label className="block text-xs font-bold text-base-content-secondary mb-1.5">분류</label>
@@ -736,6 +778,13 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
     const [scheduleDrafts, setScheduleDrafts] = useState<ExtractedScheduleDraft[]>([]);
     const [captureMessage, setCaptureMessage] = useState('');
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [hasEndTime, setHasEndTime] = useState(false);
+    const [copyDateInput, setCopyDateInput] = useState('');
+    const [copyDates, setCopyDates] = useState<string[]>([]);
+    const [isCopying, setIsCopying] = useState(false);
+    const [pendingScheduleImages, setPendingScheduleImages] = useState<PendingScheduleImage[]>([]);
+    const [isSavingEvent, setIsSavingEvent] = useState(false);
+    const [imagePreview, setImagePreview] = useState<ScheduleImagePreview | null>(null);
 
     // Form Data
     const [formData, setFormData] = useState<Omit<ScheduleEvent, 'id'>>({
@@ -745,11 +794,22 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
         isCompleted: false,
         location: '',
         time: '14:00', // Default time
-        memo: ''
+        endTime: '',
+        memo: '',
+        attachments: [],
     });
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
+
+    useEffect(() => {
+        if (!imagePreview) return;
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setImagePreview(null);
+        };
+        window.addEventListener('keydown', handleEscape);
+        return () => window.removeEventListener('keydown', handleEscape);
+    }, [imagePreview]);
 
     // Fetch Events & Settings & Checklists
     useEffect(() => {
@@ -823,22 +883,65 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
         fetchData();
     }, []);
 
+    const clearPendingScheduleImages = () => {
+        setPendingScheduleImages(prev => {
+            prev.forEach(image => URL.revokeObjectURL(image.previewUrl));
+            return [];
+        });
+    };
+
+    const closeEventModal = () => {
+        setIsEventModalOpen(false);
+        setImagePreview(null);
+        clearPendingScheduleImages();
+    };
+
+    const uploadScheduleImages = async (userId: string, eventId: string, images: PendingScheduleImage[]): Promise<ScheduleAttachment[]> => {
+        return Promise.all(images.map(async image => {
+            const safeName = image.file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const path = `users/${userId}/scheduleAttachments/${eventId}/${Date.now()}-${image.id}-${safeName}`;
+            const ref = storage.ref().child(path);
+            await ref.put(image.file, { contentType: image.file.type || 'image/png' });
+            return {
+                name: image.file.name,
+                url: await ref.getDownloadURL(),
+                path,
+                contentType: image.file.type || 'image/png',
+            };
+        }));
+    };
+
     const handleSaveEvent = async () => {
         const user = auth.currentUser;
-        if (!user) return;
+        if (!user || isSavingEvent) return;
 
         if (!formData.title.trim()) {
             await showAlert("일정 내용을 입력해주세요.");
             return;
         }
+        if (hasEndTime && (!formData.time || !formData.endTime || formData.endTime <= formData.time)) {
+            await showAlert("종료시간은 시작시간보다 뒤여야 합니다.");
+            return;
+        }
 
+        setIsSavingEvent(true);
         try {
+            const collectionRef = firestore.collection('users').doc(user.uid).collection('schedules');
+            const docRef = editingId ? collectionRef.doc(editingId) : collectionRef.doc();
+            const uploadedAttachments = pendingScheduleImages.length > 0
+                ? await uploadScheduleImages(user.uid, docRef.id, pendingScheduleImages)
+                : [];
+            const eventData = {
+                ...formData,
+                endTime: hasEndTime ? formData.endTime || '' : '',
+                attachments: [...(formData.attachments || []), ...uploadedAttachments],
+            };
             if (editingId) {
-                await firestore.collection('users').doc(user.uid).collection('schedules').doc(editingId).update(formData);
-                setEvents(prev => prev.map(e => e.id === editingId ? { ...formData, id: editingId } : e));
+                await docRef.update(eventData);
+                setEvents(prev => prev.map(e => e.id === editingId ? { ...eventData, id: editingId } : e));
             } else {
-                const docRef = await firestore.collection('users').doc(user.uid).collection('schedules').add(formData);
-                setEvents(prev => [...prev, { ...formData, id: docRef.id }]);
+                await docRef.set(eventData);
+                setEvents(prev => [...prev, { ...eventData, id: docRef.id }]);
             }
             setIsEventModalOpen(false);
             resetForm();
@@ -846,7 +949,9 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
             setCaptureMessage('');
         } catch (error) {
             console.error("Error saving schedule:", error);
-            await showAlert("저장 중 오류가 발생했습니다.");
+            await showAlert("저장 중 오류가 발생했습니다. 이미지 저장 권한과 네트워크를 확인해 주세요.");
+        } finally {
+            setIsSavingEvent(false);
         }
     };
 
@@ -934,8 +1039,11 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
     };
 
     const openEventModal = (dateStr?: string, event?: ScheduleEvent) => {
+        clearPendingScheduleImages();
         setScheduleDrafts([]);
         setCaptureMessage('');
+        setCopyDates([]);
+        setCopyDateInput('');
         if (event) {
             setEditingId(event.id);
             setFormData({
@@ -945,8 +1053,11 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                 isCompleted: event.isCompleted,
                 location: event.location,
                 time: event.time,
-                memo: event.memo
+                endTime: event.endTime || '',
+                memo: event.memo,
+                attachments: event.attachments || [],
             });
+            setHasEndTime(Boolean(event.endTime));
         } else {
             setEditingId(null);
             resetForm();
@@ -962,12 +1073,14 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
             ...prev,
             date: draft.date || prev.date,
             time: draft.time || '',
+            endTime: draft.endTime || '',
             title: draft.title || prev.title,
             category: settings.categories.some(c => c.label === draft.category) ? draft.category : prev.category,
             location: draft.location || '',
             memo: draft.memo || '',
             isCompleted: false,
         }));
+        setHasEndTime(Boolean(draft.endTime));
         setCaptureMessage(`"${draft.title}" 이렇게 등록할까요? 필요하면 아래에서 수정해 주세요.`);
     };
 
@@ -1009,6 +1122,36 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
         analyzeScheduleCapture(file);
     };
 
+    const handleMemoImagePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        const imageFiles = Array.from(e.clipboardData.items)
+            .filter(item => item.type.startsWith('image/'))
+            .map(item => item.getAsFile())
+            .filter((file): file is File => Boolean(file));
+        if (imageFiles.length === 0) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        const availableSlots = 3 - (formData.attachments?.length || 0) - pendingScheduleImages.length;
+        if (availableSlots <= 0) {
+            await showAlert('캡처 이미지는 일정 하나에 최대 3장까지 첨부할 수 있습니다.');
+            return;
+        }
+        const accepted = imageFiles.slice(0, availableSlots);
+        const oversized = accepted.find(file => file.size > 8 * 1024 * 1024);
+        if (oversized) {
+            await showAlert('이미지 한 장의 크기는 8MB 이하여야 합니다.');
+            return;
+        }
+        setPendingScheduleImages(prev => [
+            ...prev,
+            ...accepted.map((file, index) => ({
+                id: `${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
+                file,
+                previewUrl: URL.createObjectURL(file),
+            })),
+        ]);
+    };
+
     const resetForm = () => {
         setFormData({
             date: getTodayString(),
@@ -1017,8 +1160,66 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
             isCompleted: false,
             location: '',
             time: '14:00',
-            memo: ''
+            endTime: '',
+            memo: '',
+            attachments: [],
         });
+        setHasEndTime(false);
+        setCopyDates([]);
+        setCopyDateInput('');
+        clearPendingScheduleImages();
+    };
+
+    const addCopyDate = () => {
+        if (!copyDateInput || copyDateInput === formData.date || copyDates.includes(copyDateInput)) return;
+        if (copyDates.length >= 20) return;
+        setCopyDates(prev => [...prev, copyDateInput].sort());
+        setCopyDateInput('');
+    };
+
+    const handleCopyEvent = async () => {
+        const user = auth.currentUser;
+        if (!user || !editingId || copyDates.length === 0 || isCopying) return;
+        if (pendingScheduleImages.length > 0) {
+            await showAlert('붙여넣은 이미지는 먼저 아래의 수정하기로 저장한 뒤 일정을 복사해 주세요.');
+            return;
+        }
+        if (!formData.title.trim()) {
+            await showAlert('일정 내용을 입력해주세요.');
+            return;
+        }
+        if (hasEndTime && (!formData.time || !formData.endTime || formData.endTime <= formData.time)) {
+            await showAlert('종료시간은 시작시간보다 뒤여야 합니다.');
+            return;
+        }
+
+        setIsCopying(true);
+        try {
+            const eventData = {
+                ...formData,
+                endTime: hasEndTime ? formData.endTime || '' : '',
+            };
+            const collectionRef = firestore.collection('users').doc(user.uid).collection('schedules');
+            const batch = firestore.batch();
+            const copiedEvents: ScheduleEvent[] = [];
+            copyDates.forEach(date => {
+                const docRef = collectionRef.doc();
+                const copied = { ...eventData, date, isCompleted: false };
+                batch.set(docRef, copied);
+                copiedEvents.push({ ...copied, id: docRef.id });
+            });
+            await batch.commit();
+            setEvents(prev => [...prev, ...copiedEvents]);
+            const copiedCount = copyDates.length;
+            setCopyDates([]);
+            setCopyDateInput('');
+            await showAlert(`${copiedCount}개 날짜로 일정을 복사했습니다.`);
+        } catch (error) {
+            console.error('Error copying schedule:', error);
+            await showAlert('일정 복사 중 오류가 발생했습니다.');
+        } finally {
+            setIsCopying(false);
+        }
     };
 
     const handlePrevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
@@ -1388,7 +1589,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                                         {settings.viewOptions.showLocation && event.location ? event.location : event.memo}
                                                     </span>
                                                     {event.time && (
-                                                        <span className="shrink-0 font-mono font-black tabular-nums">{event.time}</span>
+                                                        <span className="shrink-0 font-mono font-black tabular-nums">{getEventTimeLabel(event)}</span>
                                                     )}
                                                 </span>
                                             ) : null}
@@ -1459,7 +1660,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                                 <div className="flex items-center gap-1.5 flex-wrap">
                                                     {settings.viewOptions.showTime && event.time && (
                                                         <span className="text-[10px] font-extrabold opacity-90 shrink-0 bg-white/40 px-1 rounded">
-                                                            {event.time}
+                                                            {getEventTimeLabel(event)}
                                                         </span>
                                                     )}
                                                     <span className={`truncate font-semibold flex-1 ${event.isCompleted ? 'line-through' : ''}`}>
@@ -1510,7 +1711,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                     >
                                         <div className="flex items-start gap-2">
                                             {settings.viewOptions.showTime && event.time && (
-                                                <span className="shrink-0 font-mono text-xs font-extrabold opacity-90">{event.time}</span>
+                                                <span className="shrink-0 font-mono text-xs font-extrabold opacity-90">{getEventTimeLabel(event)}</span>
                                             )}
                                             <span className="min-w-0 flex-1 break-words font-semibold">{event.title}</span>
                                         </div>
@@ -1526,7 +1727,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
             )}
 
             {/* Right: Checklists (LG: 30%) - iPad Fix: Added pb-32 — 모바일 order-3 */}
-            <div className="order-3 grid h-auto min-h-0 shrink-0 grid-cols-1 gap-4 pb-32 custom-scrollbar max-md:w-full md:grid-cols-3 md:pb-20 xl:order-none xl:flex xl:h-full xl:flex-[3] xl:flex-col xl:overflow-y-auto xl:pb-0">
+            <div className="schedule-checklist-grid order-3 grid h-auto min-h-0 shrink-0 grid-cols-1 gap-4 pb-32 custom-scrollbar max-md:w-full md:grid-cols-3 md:pb-20 xl:order-none xl:flex xl:h-full xl:flex-[3] xl:flex-col xl:overflow-y-auto xl:pb-0">
                 {/* Daily */}
                 <div className="min-w-0 shrink-0">
                     <ChecklistSection
@@ -1589,10 +1790,10 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
 
             {/* Modals ... */}
             {isEventModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setIsEventModalOpen(false)}>
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={closeEventModal}>
                     {/* ... (Existing Modal Content) ... */}
                     <div
-                        className="bg-white rounded-xl shadow-2xl w-full max-w-lg border border-base-300"
+                        className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[92dvh] overflow-y-auto custom-scrollbar border border-base-300"
                         onClick={e => e.stopPropagation()}
                         onPaste={handleScheduleCapturePaste}
                         onKeyDown={handleEventModalKeyDown}
@@ -1602,7 +1803,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                 <h3 className="text-xl font-bold text-base-content">
                                     {editingId ? '일정 수정' : '새 일정 등록'}
                                 </h3>
-                                <button onClick={() => setIsEventModalOpen(false)} className="text-base-content-secondary hover:text-base-content">
+                                <button onClick={closeEventModal} className="text-base-content-secondary hover:text-base-content">
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
@@ -1638,13 +1839,13 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                             <div className="mt-2 flex flex-wrap gap-2">
                                                 {scheduleDrafts.map((draft, index) => (
                                                     <button
-                                                        key={`${draft.date}-${draft.time}-${draft.title}-${index}`}
+                                                        key={`${draft.date}-${draft.time}-${draft.endTime}-${draft.title}-${index}`}
                                                         type="button"
                                                         onClick={() => applyScheduleDraft(draft)}
                                                         className="rounded-lg border border-primary/20 bg-white px-2.5 py-1.5 text-left text-xs font-bold text-primary shadow-sm hover:bg-primary/10"
                                                         title={draft.needsReview ? '확인이 필요한 후보' : '일정 후보 적용'}
                                                     >
-                                                        {draft.date} {draft.time && `${draft.time} `}{draft.title}
+                                                        {draft.date} {draft.time && `${draft.time}${draft.endTime ? `–${draft.endTime}` : ''} `}{draft.title}
                                                     </button>
                                                 ))}
                                             </div>
@@ -1662,7 +1863,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-base-content-secondary mb-1.5">시간</label>
+                                        <label className="block text-xs font-bold text-base-content-secondary mb-1.5">시작시간</label>
                                         <input
                                             type="time"
                                             value={formData.time}
@@ -1671,6 +1872,73 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                         />
                                     </div>
                                 </div>
+
+                                <div className="rounded-xl border border-base-200 bg-base-50 p-3">
+                                    <label className="flex cursor-pointer items-center justify-between gap-3">
+                                        <span>
+                                            <span className="block text-sm font-bold text-base-content">종료시간 입력</span>
+                                            <span className="block text-xs text-base-content-secondary">필요할 때만 켜 주세요.</span>
+                                        </span>
+                                        <input
+                                            type="checkbox"
+                                            checked={hasEndTime}
+                                            onChange={(e) => setHasEndTime(e.target.checked)}
+                                            className="checkbox checkbox-sm"
+                                        />
+                                    </label>
+                                    {hasEndTime && (
+                                        <div className="mt-3">
+                                            <label className="block text-xs font-bold text-base-content-secondary mb-1.5">종료시간</label>
+                                            <input
+                                                type="time"
+                                                value={formData.endTime || ''}
+                                                onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                                                className="w-full p-2.5 bg-white border border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm text-base-content shadow-sm"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {editingId && (
+                                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
+                                        <div className="mb-2">
+                                            <p className="text-sm font-bold text-base-content">다른 날짜로 복사</p>
+                                            <p className="text-xs text-base-content-secondary">날짜를 하나씩 추가한 뒤, 복사하기를 눌러 한 번에 등록하세요.</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={handleCopyEvent}
+                                            disabled={copyDates.length === 0 || isCopying}
+                                            className="mb-3 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-bold text-primary-content shadow-sm hover:bg-primary-focus disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                                        >
+                                            {isCopying && <span className="loading loading-spinner loading-xs" />}
+                                            {copyDates.length > 0 ? `선택한 ${copyDates.length}개 날짜로 복사하기` : '복사할 날짜를 추가해 주세요'}
+                                        </button>
+                                        <label className="mb-1.5 block text-xs font-bold text-base-content-secondary">복사할 날짜 추가</label>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="date"
+                                                value={copyDateInput}
+                                                min="2000-01-01"
+                                                onChange={(e) => setCopyDateInput(e.target.value)}
+                                                onKeyDown={(e) => e.stopPropagation()}
+                                                className="min-w-0 flex-1 p-2 bg-white border border-base-300 rounded-lg text-sm"
+                                            />
+                                            <button type="button" onClick={addCopyDate} disabled={!copyDateInput || copyDateInput === formData.date || copyDates.length >= 20 || isCopying} className="shrink-0 rounded-lg border border-primary bg-white px-3 py-2 text-xs font-bold text-primary disabled:cursor-not-allowed disabled:opacity-40">
+                                                날짜 추가
+                                            </button>
+                                        </div>
+                                        {copyDates.length > 0 && (
+                                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                                {copyDates.map(date => (
+                                                    <button key={date} type="button" onClick={() => setCopyDates(prev => prev.filter(d => d !== date))} className="rounded-full border border-primary/20 bg-white px-2.5 py-1 text-xs font-bold text-primary hover:bg-red-50 hover:text-red-600" title="복사 날짜에서 제거">
+                                                        {date} ×
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 <div>
                                     <label className="block text-xs font-bold text-base-content-secondary mb-1.5">분류</label>
@@ -1730,14 +1998,66 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-bold text-base-content-secondary mb-1.5">메모</label>
+                                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                                        <label className="block text-xs font-bold text-base-content-secondary">메모</label>
+                                        <span className="text-[10px] font-semibold text-primary">캡처 이미지를 여기에 붙여넣을 수 있어요 · 최대 3장</span>
+                                    </div>
                                     <textarea
                                         value={formData.memo}
                                         onChange={(e) => setFormData({ ...formData, memo: e.target.value })}
-                                        placeholder="자세한 내용을 입력하세요..."
+                                        onPaste={handleMemoImagePaste}
+                                        placeholder="자세한 내용을 입력하거나 캡처 이미지를 붙여넣으세요..."
                                         rows={3}
-                                        className="w-full p-2.5 bg-white border border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm text-base-content shadow-sm resize-none placeholder-base-300/70"
+                                        className="w-full p-2.5 bg-white border border-dashed border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm text-base-content shadow-sm resize-none placeholder-base-300/70"
                                     />
+                                    {((formData.attachments?.length || 0) > 0 || pendingScheduleImages.length > 0) && (
+                                        <div className="mt-2 grid grid-cols-3 gap-2">
+                                            {(formData.attachments || []).map(attachment => (
+                                                <div key={attachment.path} className="group relative overflow-hidden rounded-lg border border-base-300 bg-base-50 aspect-video">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setImagePreview({ url: attachment.url, name: attachment.name || '일정 첨부 이미지' })}
+                                                        className="h-full w-full cursor-zoom-in"
+                                                        title="이미지 크게 보기"
+                                                    >
+                                                        <img src={attachment.url} alt={attachment.name || '일정 첨부 이미지'} className="h-full w-full object-cover" />
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData(prev => ({ ...prev, attachments: (prev.attachments || []).filter(item => item.path !== attachment.path) }))}
+                                                        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-sm font-bold text-white opacity-80 hover:bg-red-600 hover:opacity-100"
+                                                        title="첨부에서 제거"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            {pendingScheduleImages.map(image => (
+                                                <div key={image.id} className="group relative overflow-hidden rounded-lg border-2 border-primary/40 bg-primary/5 aspect-video">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setImagePreview({ url: image.previewUrl, name: image.file.name || '붙여넣은 캡처 이미지' })}
+                                                        className="h-full w-full cursor-zoom-in"
+                                                        title="이미지 크게 보기"
+                                                    >
+                                                        <img src={image.previewUrl} alt="붙여넣은 캡처 미리보기" className="h-full w-full object-cover" />
+                                                    </button>
+                                                    <span className="absolute bottom-1 left-1 rounded bg-primary px-1.5 py-0.5 text-[9px] font-bold text-white">저장 예정</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            URL.revokeObjectURL(image.previewUrl);
+                                                            setPendingScheduleImages(prev => prev.filter(item => item.id !== image.id));
+                                                        }}
+                                                        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/65 text-sm font-bold text-white opacity-80 hover:bg-red-600 hover:opacity-100"
+                                                        title="첨부에서 제거"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -1755,21 +2075,48 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                 ) : <div></div>}
                                 <div className="flex gap-2">
                                     <button
-                                        onClick={() => setIsEventModalOpen(false)}
+                                        onClick={closeEventModal}
                                         className="px-4 py-2 bg-base-200 text-base-content-secondary font-bold rounded-lg hover:bg-base-300 transition-colors text-sm"
                                     >
                                         취소
                                     </button>
                                     <button
                                         onClick={handleSaveEvent}
-                                        className="px-6 py-2 bg-primary text-primary-content font-bold rounded-lg shadow-md hover:bg-primary-focus hover:shadow-lg transition-all text-sm"
+                                        disabled={isSavingEvent}
+                                        className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-content font-bold rounded-lg shadow-md hover:bg-primary-focus hover:shadow-lg transition-all text-sm disabled:cursor-wait disabled:opacity-60"
                                     >
+                                        {isSavingEvent && <span className="loading loading-spinner loading-xs" />}
                                         {editingId ? '수정하기 (Enter)' : '등록하기 (Enter)'}
                                     </button>
                                 </div>
                             </div>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {imagePreview && (
+                <div
+                    className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm sm:p-8"
+                    onClick={() => setImagePreview(null)}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="첨부 이미지 크게 보기"
+                >
+                    <button
+                        type="button"
+                        onClick={() => setImagePreview(null)}
+                        className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-3xl font-light text-white backdrop-blur transition-colors hover:bg-white/25 sm:right-6 sm:top-6"
+                        aria-label="이미지 닫기"
+                    >
+                        ×
+                    </button>
+                    <img
+                        src={imagePreview.url}
+                        alt={imagePreview.name}
+                        onClick={event => event.stopPropagation()}
+                        className="max-h-[88dvh] max-w-[94vw] rounded-lg object-contain shadow-2xl"
+                    />
                 </div>
             )}
 

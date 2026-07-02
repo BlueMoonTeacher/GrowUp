@@ -6,6 +6,7 @@ import { normalizeGeminiModel } from "../constants/geminiModels";
 export interface ExtractedScheduleDraft {
     date: string;
     time: string;
+    endTime: string;
     title: string;
     category: string;
     location: string;
@@ -198,7 +199,8 @@ const scheduleDraftSchema = {
         type: Type.OBJECT,
         properties: {
             date: { type: Type.STRING, description: "일정 날짜. YYYY-MM-DD 형식. 날짜가 불확실하면 기준 날짜를 넣고 needsReview를 true로 표시" },
-            time: { type: Type.STRING, description: "일정 시간. HH:mm 형식. 명확한 시간이 없으면 빈 문자열" },
+            time: { type: Type.STRING, description: "일정 시작시간. HH:mm 형식. 명확한 시간이 없으면 빈 문자열" },
+            endTime: { type: Type.STRING, description: "일정 종료시간. HH:mm 형식. 시간 범위가 없으면 빈 문자열" },
             title: { type: Type.STRING, description: "캘린더에 표시할 짧은 일정 제목" },
             category: { type: Type.STRING, description: "제공된 분류 중 가장 가까운 분류명" },
             location: { type: Type.STRING, description: "장소. 없으면 빈 문자열" },
@@ -408,12 +410,14 @@ export async function extractScheduleEventsFromImage(
         1. AI가 바로 저장하는 용도가 아니라 사용자가 검토할 초안입니다. 불확실한 정보는 needsReview=true로 표시하세요.
         2. 날짜가 명확하지 않으면 date에는 기준 날짜(${referenceDate})를 넣고 needsReview=true로 표시하세요.
         3. 시간이 명확하지 않으면 time은 빈 문자열("")로 두세요. 추측으로 시간을 만들지 마세요.
+           - "18:00~22:00", "18:00-22:00"처럼 시간 범위가 있으면 time에는 시작시간 "18:00", endTime에는 종료시간 "22:00"을 넣으세요.
+           - 시작시간만 있으면 time에만 넣고 endTime은 빈 문자열("")로 두세요.
         4. title은 캘린더 칸에 보일 짧은 제목으로 작성하세요.
         5. memo에는 "캡처 내용에서 추출됨" 같은 출처 문구를 쓰지 말고, 캡처 내용 중 보관하면 좋은 핵심 안내만 정리하세요.
         6. 반복 일정이나 고정 일정 추론은 하지 마세요. 반복처럼 보여도 명확히 보이는 날짜별 후보만 반환하세요.
         7. 일정으로 볼 수 있는 날짜/마감/행사/제출/회의/연수/준비 항목이 없으면 빈 배열을 반환하세요.
         8. category는 반드시 사용 가능한 분류 중 하나로 선택하세요. 애매하면 "${defaultCategory}"를 사용하세요.
-        9. date는 YYYY-MM-DD, time은 HH:mm 형식을 지키세요.
+        9. date는 YYYY-MM-DD, time과 endTime은 HH:mm 형식을 지키세요.
     `;
 
     try {
@@ -436,18 +440,31 @@ export async function extractScheduleEventsFromImage(
                 const date = typeof row.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(row.date)
                     ? row.date
                     : referenceDate;
-                const time = typeof row.time === 'string' && /^\d{2}:\d{2}$/.test(row.time)
-                    ? row.time
+                const rawTime = typeof row.time === 'string' ? row.time.trim() : '';
+                const rawEndTime = typeof row.endTime === 'string' ? row.endTime.trim() : '';
+                const rangeMatch = rawTime.match(/^(\d{2}:\d{2})\s*(?:~|〜|–|—|-)\s*(\d{2}:\d{2})$/);
+                const isValidTime = (value: string) => {
+                    const match = value.match(/^(\d{2}):(\d{2})$/);
+                    return Boolean(match && Number(match[1]) < 24 && Number(match[2]) < 60);
+                };
+                const time = rangeMatch
+                    ? (isValidTime(rangeMatch[1]) ? rangeMatch[1] : '')
+                    : (isValidTime(rawTime) ? rawTime : '');
+                const endTimeCandidate = rangeMatch ? rangeMatch[2] : rawEndTime;
+                const endTime = isValidTime(endTimeCandidate) && time && endTimeCandidate > time
+                    ? endTimeCandidate
                     : '';
+                const invalidTimeRange = Boolean(endTimeCandidate && !endTime);
                 return {
                     date,
                     time,
+                    endTime,
                     title: (row.title || '').trim(),
                     category,
                     location: (row.location || '').trim(),
                     memo: (row.memo || '').trim(),
                     confidence: row.confidence || 'medium',
-                    needsReview: Boolean(row.needsReview || date === referenceDate && row.date !== referenceDate),
+                    needsReview: Boolean(row.needsReview || invalidTimeRange || date === referenceDate && row.date !== referenceDate),
                 };
             })
             .filter((row: ExtractedScheduleDraft) => row.title.length > 0);

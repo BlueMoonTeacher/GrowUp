@@ -117,8 +117,17 @@ export interface ScheduleEvent {
   category: string; // Now a string to support custom categories (matches ScheduleCategoryDef.label or id)
   isCompleted: boolean; // 체크 여부
   location: string; // 장소
-  time: string; // 시간
+  time: string; // 시작 시간
+  endTime?: string; // 종료 시간 (선택)
   memo: string; // 긴 메모
+  attachments?: ScheduleAttachment[]; // 메모에 첨부한 캡처 이미지
+}
+
+export interface ScheduleAttachment {
+  name: string;
+  url: string;
+  path: string;
+  contentType: string;
 }
 
 // Checklist Types

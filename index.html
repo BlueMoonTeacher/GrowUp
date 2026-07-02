@@ -131,6 +131,22 @@
       input[type="date"]::-webkit-calendar-picker-indicator:hover {
         opacity: 1;
       }
+
+      /* 세로형 태블릿/모니터에서는 남는 하단 공간을 체크리스트에 사용한다. */
+      @media (orientation: portrait) and (min-width: 768px) {
+        .schedule-checklist-grid {
+          min-height: min(42rem, calc(100dvh - 8rem));
+        }
+
+        .schedule-checklist-card {
+          min-height: 32rem;
+        }
+
+        .schedule-checklist-list {
+          min-height: 23rem;
+          max-height: none !important;
+        }
+      }
     </style>
   </head>
   <body>

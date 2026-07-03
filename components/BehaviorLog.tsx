@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
-import { BehaviorRecord, Student, AnalysisResult } from '../types';
+import { BehaviorRecord, Student, AnalysisResult, BehaviorObservationType } from '../types';
 import AnalysisModal from './AnalysisModal';
 import { useModal } from '../context/ModalContext';
 import { AppSettings } from '../App';
+import { inferObservationType, resolveObservationType } from '../utils/behaviorUtils';
 
 interface BehaviorLogProps {
   student: Student;
@@ -27,6 +28,12 @@ const PERIODS = [
   '방과후'
 ];
 
+const OBSERVATION_TYPES = [
+  { value: 'positive' as const, label: '긍정 행동', icon: '＋', activeClass: 'border-emerald-400 bg-emerald-50 text-emerald-700' },
+  { value: 'neutral' as const, label: '일반 관찰', icon: '•', activeClass: 'border-slate-400 bg-slate-50 text-slate-700' },
+  { value: 'guidance' as const, label: '지도 필요', icon: '!', activeClass: 'border-rose-400 bg-rose-50 text-rose-700' },
+];
+
 // Helper to get local date string in YYYY-MM-DD format
 const getTodayString = () => {
   // Using 'en-CA' locale reliably provides the YYYY-MM-DD format.
@@ -38,31 +45,34 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
   const [date, setDate] = useState(getTodayString);
   const [period, setPeriod] = useState('일반');
   const [content, setContent] = useState('');
+  const [context, setContext] = useState('');
+  const [followUp, setFollowUp] = useState('');
   const [filterMonth, setFilterMonth] = useState<string>('all');
   const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
 
-  // 1st Semester Opinion State
-  const [sem1Opinion, setSem1Opinion] = useState(student.semester1Opinion || '');
-  const [isSem1Open, setIsSem1Open] = useState(false);
-  const [isSavingSem1, setIsSavingSem1] = useState(false);
-
   // Editing State
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editData, setEditData] = useState<{date: string, period: string, content: string} | null>(null);
+  const [editData, setEditData] = useState<{
+    date: string;
+    period: string;
+    content: string;
+    observationType: BehaviorObservationType;
+    context: string;
+    followUp: string;
+  } | null>(null);
 
   // Reset form and filter when student changes
   useEffect(() => {
     setDate(getTodayString());
     setPeriod('일반');
     setContent('');
+    setContext('');
+    setFollowUp('');
     setFilterMonth('all');
     setIsAnalysisModalOpen(false);
     setEditingId(null);
     setEditData(null);
-    // Sync 1st semester opinion
-    setSem1Opinion(student.semester1Opinion || '');
-    setIsSem1Open(false);
-  }, [student.id, student.semester1Opinion]);
+  }, [student.id]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,31 +82,26 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
       date,
       period,
       content: content.trim(),
+      observationType: inferObservationType(`${context} ${content} ${followUp}`),
+      observationTypeSource: 'auto',
+      context: context.trim(),
+      followUp: followUp.trim(),
       timestamp: Date.now(),
     });
     setContent('');
-  };
-
-  const handleSaveSem1Opinion = async () => {
-      setIsSavingSem1(true);
-      try {
-          await onUpdateStudent({
-              ...student,
-              semester1Opinion: sem1Opinion
-          });
-          showToast("1학기 종합의견이 저장되었습니다.");
-      } catch (e) {
-          console.error(e);
-          showToast("저장 중 오류가 발생했습니다.");
-      } finally {
-          setIsSavingSem1(false);
-      }
+    setContext('');
+    setFollowUp('');
   };
 
   const handleSaveAnalysis = async (result: AnalysisResult) => {
+      const mode = result.mode || 'semester1';
       const updatedStudent = {
           ...student,
-          analysisResult: result
+          analysisResult: result,
+          behaviorAnalysisResults: {
+              ...(student.behaviorAnalysisResults || {}),
+              [mode]: result
+          }
       };
       await onUpdateStudent(updatedStudent);
   };
@@ -106,8 +111,15 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
           if (a.date !== b.date) return a.date.localeCompare(b.date);
           return a.timestamp - b.timestamp;
       });
-      const rows = [['날짜별', '시간별', '내용'] as const].concat(
-          records.map((r) => [r.date, r.period, r.content])
+      const rows = [['날짜별', '시간별', '구분', '관찰 상황', '구체적 행동', '지도 및 후속 변화']].concat(
+          records.map((r) => [
+            r.date,
+            r.period,
+            resolveObservationType(r) === 'positive' ? '긍정' : resolveObservationType(r) === 'guidance' ? '지도 필요' : '중립',
+            r.context || '',
+            r.content,
+            r.followUp || ''
+          ])
       );
       const ws = XLSX.utils.aoa_to_sheet(rows);
       const wb = XLSX.utils.book_new();
@@ -124,7 +136,10 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
       setEditData({
           date: record.date,
           period: record.period,
-          content: record.content
+          content: record.content,
+          observationType: resolveObservationType(record),
+          context: record.context || '',
+          followUp: record.followUp || ''
       });
   };
 
@@ -143,10 +158,14 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
       const updatedRecords = (student.behaviorRecords || []).map(r => {
           if (r.id === editingId) {
               return {
-                  ...r,
-                  date: editData.date,
-                  period: editData.period,
-                  content: editData.content
+                    ...r,
+                    date: editData.date,
+                    period: editData.period,
+                    content: editData.content.trim(),
+                    observationType: editData.observationType,
+                    observationTypeSource: 'manual' as const,
+                    context: editData.context.trim(),
+                    followUp: editData.followUp.trim()
               };
           }
           return r;
@@ -200,42 +219,6 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
 
   return (
     <div className="relative flex max-md:h-auto max-md:overflow-visible flex-col overflow-hidden rounded-xl border border-base-300/60 bg-base-100 p-4 max-md:min-h-0 md:h-full md:min-h-0">
-      {/* 1st Semester Opinion — PC·태블릿만 (모바일에서는 숨김) */}
-      <div className="mb-4 hidden border border-base-300 rounded-lg bg-base-50/50 overflow-hidden md:block">
-          <button 
-            onClick={() => setIsSem1Open(!isSem1Open)}
-            className="w-full px-4 py-2.5 flex items-center justify-between text-sm font-bold text-base-content hover:bg-base-100 transition-colors"
-          >
-              <div className="flex items-center gap-2">
-                  <span>1학기 행동 특성 및 종합의견</span>
-                  {student.semester1Opinion && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">작성됨</span>}
-              </div>
-              <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform duration-200 ${isSem1Open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-              </svg>
-          </button>
-          
-          {isSem1Open && (
-              <div className="p-3 border-t border-base-300 bg-white animate-[fadeIn_0.2s_ease-out]">
-                  <textarea 
-                      value={sem1Opinion}
-                      onChange={(e) => setSem1Opinion(e.target.value)}
-                      placeholder="1학기 생활기록부 내용을 입력하세요. 이 내용은 AI 분석 시 수시 기록과 함께 종합되어 1년 전체 의견 작성에 활용됩니다."
-                      className="w-full p-3 border border-base-300 rounded-lg text-sm min-h-[100px] focus:ring-primary focus:border-primary resize-y mb-2 bg-white text-gray-900"
-                  />
-                  <div className="flex justify-end">
-                      <button 
-                        onClick={handleSaveSem1Opinion}
-                        disabled={isSavingSem1 || sem1Opinion === (student.semester1Opinion || '')}
-                        className="px-4 py-1.5 bg-base-200 hover:bg-primary hover:text-white text-base-content-secondary text-xs font-bold rounded-lg transition-all flex items-center gap-1 disabled:opacity-50 disabled:hover:bg-base-200 disabled:hover:text-base-content-secondary"
-                      >
-                          {isSavingSem1 ? <span className="loading loading-spinner loading-xs"></span> : '저장'}
-                      </button>
-                  </div>
-              </div>
-          )}
-      </div>
-
       {/* 모바일: 한 줄(제목·건수·AI), 다운로드 없음 / md+: 기존(다운로드 포함) */}
       <div className="mb-4 flex min-w-0 flex-row items-center justify-between gap-2 md:gap-3 lg:justify-between">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 md:flex-initial md:gap-2">
@@ -264,7 +247,7 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
                 type="button"
                 onClick={() => setIsAnalysisModalOpen(true)}
                 className="flex shrink-0 items-center rounded-full bg-gradient-to-r from-primary to-primary-focus px-2 py-1 text-[11px] font-bold text-primary-content shadow-md transition-all hover:shadow-lg active:scale-95 whitespace-nowrap md:px-3 md:py-1.5 md:text-xs"
-                title="1학기 의견과 수시 기록을 바탕으로 최종 리포트 작성"
+                title="수시 관찰 기록을 바탕으로 1학기 또는 학년말 초안 작성"
             >
                 <span className="md:hidden">AI 분석</span>
                 <span className="hidden md:inline">AI 종합 분석</span>
@@ -274,31 +257,46 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
 
       {/* Input Form */}
       <form onSubmit={handleSubmit} className="bg-base-100 p-3 rounded-lg border border-base-300/70 mb-4 space-y-3">
-        <div className="flex space-x-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className={`${inputClass} w-1/3`}
+            className={inputClass}
             required
           />
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
-            className={`${inputClass} w-2/3`}
+            className={inputClass}
           >
             {PERIODS.map((p) => (
               <option key={p} value={p}>{p}</option>
             ))}
           </select>
         </div>
+        <p className="text-[11px] text-base-content-secondary">기록 내용에 따라 긍정 행동·일반 관찰·지도 필요 항목으로 자동 구분됩니다.</p>
+        <input
+          type="text"
+          value={context}
+          onChange={(e) => setContext(e.target.value)}
+          placeholder="관찰 상황 (선택) · 예: 모둠 토의 중, 쉬는 시간에"
+          className={inputClass}
+        />
         <div>
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder={`${student.name.hangul} 학생의 행동 특성이나 관찰 내용을 기록하세요...`}
+            placeholder={`${student.name.hangul} 학생에게서 직접 관찰한 구체적인 행동을 기록하세요...`}
             className={`${inputClass} h-20 resize-none`}
             required
+          />
+          <input
+            type="text"
+            value={followUp}
+            onChange={(e) => setFollowUp(e.target.value)}
+            placeholder="교사의 지도 또는 이후 변화 (선택)"
+            className={`${inputClass} mt-2`}
           />
           <div className="flex justify-end mt-2">
             <button
@@ -337,7 +335,15 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
       {/* Records List — PC만 카드 내부 스크롤, 모바일은 전체 높이에 펼침 */}
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-2 pb-10 custom-scrollbar max-md:flex-none max-md:overflow-visible md:pb-24">
         {filteredRecords.length > 0 ? (
-          filteredRecords.map((record) => (
+          filteredRecords.map((record) => {
+            const resolvedType = resolveObservationType(record);
+            const visual = OBSERVATION_TYPES.find(type => type.value === resolvedType) || OBSERVATION_TYPES[1];
+            const recordBorderClass = resolvedType === 'guidance'
+              ? 'border-rose-300 bg-rose-50/30'
+              : resolvedType === 'positive'
+                ? 'border-emerald-200 bg-emerald-50/20'
+                : 'border-base-300 bg-base-100';
+            return (
             <div 
                 key={record.id} 
                 onClick={() => {
@@ -345,34 +351,54 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
                     navigator.clipboard.writeText(record.content);
                     showToast("내용이 복사되었습니다.");
                 }}
-                className={`bg-base-100 p-3 rounded-lg border shadow-sm transition-all group relative ${editingId === record.id ? 'border-primary ring-1 ring-primary' : 'border-base-300 hover:shadow-md cursor-pointer active:scale-[0.99] active:bg-base-200'}`}
+                className={`p-3 rounded-lg border shadow-sm transition-all group relative ${editingId === record.id ? 'border-primary bg-white ring-1 ring-primary' : `${recordBorderClass} hover:shadow-md cursor-pointer active:scale-[0.99]`}`}
                 title={editingId === record.id ? '' : "클릭하여 복사"}
             >
                {editingId === record.id && editData ? (
                    // Edit Mode
                    <div className="space-y-2 animate-[fadeIn_0.2s_ease-out]">
-                       <div className="flex gap-2">
-                           <input 
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                            <input
                                 type="date" 
                                 value={editData.date} 
                                 onChange={(e) => setEditData({...editData, date: e.target.value})}
-                                className={`${inputClass} w-1/3 text-xs`}
+                                 className={`${inputClass} text-xs`}
                            />
                            <select
                                 value={editData.period}
                                 onChange={(e) => setEditData({...editData, period: e.target.value})}
-                                className={`${inputClass} w-2/3 text-xs`}
+                                className={`${inputClass} text-xs`}
                            >
                                 {PERIODS.map((p) => (
                                 <option key={p} value={p}>{p}</option>
                                 ))}
-                           </select>
-                       </div>
-                       <textarea 
+                            </select>
+                            <select
+                                value={editData.observationType}
+                                onChange={(e) => setEditData({...editData, observationType: e.target.value as BehaviorObservationType})}
+                                className={`${inputClass} text-xs`}
+                                title="자동 분류가 맞지 않을 때만 수정하세요."
+                            >
+                                {OBSERVATION_TYPES.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+                            </select>
+                        </div>
+                        <input
+                            value={editData.context}
+                            onChange={(e) => setEditData({...editData, context: e.target.value})}
+                            placeholder="관찰 상황 (선택)"
+                            className={`${inputClass} text-xs`}
+                        />
+                        <textarea
                             value={editData.content}
                             onChange={(e) => setEditData({...editData, content: e.target.value})}
                             className={`${inputClass} min-h-[5rem] resize-none`}
-                       />
+                        />
+                        <input
+                            value={editData.followUp}
+                            onChange={(e) => setEditData({...editData, followUp: e.target.value})}
+                            placeholder="교사의 지도 또는 이후 변화 (선택)"
+                            className={`${inputClass} text-xs`}
+                        />
                        <div className="flex justify-end gap-2">
                            <button onClick={(e) => { e.stopPropagation(); handleCancelEdit(); }} className="px-3 py-1.5 bg-base-200 hover:bg-base-300 text-xs font-bold rounded-lg text-base-content-secondary">취소</button>
                            <button onClick={(e) => { e.stopPropagation(); handleSaveEdit(); }} className="px-3 py-1.5 bg-primary hover:bg-primary-focus text-xs font-bold rounded-lg text-primary-content">저장</button>
@@ -382,7 +408,12 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
                    // View Mode
                    <>
                         <div className="flex justify-between items-start mb-2 pointer-events-none">
-                            <div className="flex flex-wrap items-center gap-2">
+                             <div className="flex flex-wrap items-center gap-2">
+                                {resolvedType !== 'neutral' && (
+                                  <span className={`px-2 py-0.5 text-xs font-bold rounded-md border ${visual.activeClass}`} title="기록 내용에 따라 자동 구분됨">
+                                    {visual.icon} {visual.label}
+                                  </span>
+                                )}
                                 <span 
                                     className="px-2 py-0.5 bg-base-200 text-base-content-secondary text-xs font-bold rounded-md border border-base-300 pointer-events-auto hover:bg-primary/10 hover:text-primary hover:border-primary transition-colors cursor-pointer"
                                     onClick={(e) => {
@@ -428,13 +459,16 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
                                 </button>
                             </div>
                         </div>
+                        {record.context && <p className="mb-1 text-xs font-semibold text-base-content-secondary pointer-events-none">상황 · {record.context}</p>}
                         <p className="text-sm text-base-content whitespace-pre-wrap leading-relaxed pointer-events-none">
                             {record.content}
                         </p>
+                        {record.followUp && <p className="mt-2 border-t border-current/10 pt-2 text-xs text-base-content-secondary pointer-events-none">지도·후속 · {record.followUp}</p>}
                    </>
                )}
             </div>
-          ))
+            );
+          })
         ) : (
           <div className="h-full flex flex-col items-center justify-center text-base-content-secondary space-y-2 opacity-60">
             <p className="text-sm font-medium">

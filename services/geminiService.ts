@@ -1,7 +1,8 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { Student, BehaviorRecord, AnalysisResult, Assessment } from "../types";
+import { Student, BehaviorRecord, AnalysisResult, Assessment, BehaviorAnalysisMode } from "../types";
 import { normalizeGeminiModel } from "../constants/geminiModels";
+import { resolveObservationType } from "../utils/behaviorUtils";
 
 export interface ExtractedScheduleDraft {
     date: string;
@@ -153,7 +154,7 @@ const analysisSchema = {
         },
         report: {
             type: Type.STRING,
-            description: "학교생활기록부 '행동특성 및 종합의견' 최종 기재용 완성글. 5~7문장 내외로 작성."
+            description: "교사가 검토·수정할 학교생활기록부 '행동특성 및 종합의견' 초안. 요청된 학기 모드와 분량을 따름."
         },
         advice: {
             type: Type.ARRAY,
@@ -251,7 +252,7 @@ export async function extractStudentInfoFromFile(file: File, apiKey?: string, mo
 export async function analyzeBehaviorRecords(
     studentName: string,
     records: BehaviorRecord[],
-    semester1Opinion?: string,
+    mode: BehaviorAnalysisMode = 'semester1',
     apiKey?: string,
     model?: string
 ): Promise<AnalysisResult> {
@@ -263,33 +264,58 @@ export async function analyzeBehaviorRecords(
     const selectedModel = normalizeGeminiModel(model);
 
     // 기록 데이터를 텍스트로 변환
-    const recordsText = records
+    const targetRecords = mode === 'semester1'
+        ? records.filter(record => {
+            const month = Number(record.date.slice(5, 7));
+            return month >= 3 && month <= 8;
+        })
+        : records;
+    const recordsText = [...targetRecords]
         .sort((a, b) => a.date.localeCompare(b.date))
-        .map(r => `[${r.date} ${r.period}] ${r.content}`)
+        .map(r => {
+            const resolvedType = resolveObservationType(r);
+            const type = resolvedType === 'positive' ? '긍정 행동' : resolvedType === 'guidance' ? '지도 필요' : '일반 관찰';
+            return [
+                `[${r.date} ${r.period} / ${type}]`,
+                r.context ? `관찰 상황: ${r.context}` : '',
+                `구체적 행동: ${r.content}`,
+                r.followUp ? `지도 및 후속 변화: ${r.followUp}` : ''
+            ].filter(Boolean).join(' ');
+        })
         .join("\n");
+
+    if (!recordsText) {
+        throw new Error(mode === 'semester1' ? '1학기에 해당하는 행동 기록이 없습니다.' : '분석할 행동 기록이 없습니다.');
+    }
+
+    const modeTitle = mode === 'semester1' ? '1학기 행동특성 및 종합의견 초안' : '학년말 행동특성 및 종합의견 초안';
+    const sourceDescription = mode === 'semester1'
+        ? '3월부터 8월까지의 수시 관찰 기록만을 근거로 1학기 내용을 작성'
+        : '3월부터 다음 해 2월까지의 연간 수시 관찰 기록 전체를 근거로 학년말 내용을 작성';
+    const lengthGuide = mode === 'semester1' ? '4~6문장, 공백 포함 400~600자 내외' : '5~7문장, 공백 포함 500~700자 내외';
 
     const prompt = `
     당신은 대한민국 초등학교 생활기록부 작성 전문가입니다. 
-    제공된 **'2025학년도 학교생활기록부 기재요령'**을 철저히 준수하여, 다음 학생의 1학기 의견과 수시 관찰 기록을 종합하여 **'학년말 최종 행동특성 및 종합의견'**을 작성하세요.
+    제공된 **'2026학년도 학교생활기록부 기재요령'**을 준수하여 다음 학생의 **${modeTitle}**을 작성하세요.
 
     [학생 이름]: ${studentName}
     
-    [1학기 행동 특성 및 종합의견 (기존 작성됨)]:
-    ${semester1Opinion ? semester1Opinion : "작성된 1학기 내용 없음."}
-
     [수시 관찰 기록 (누가기록)]:
     ${recordsText}
 
     [작성 목표]
-    1학기 의견과 수시 관찰 기록을 종합하여 학생의 1년간의 핵심적인 성장과 특성을 **구체적인 사례를 곁들여** 기술하십시오.
-    단순한 나열보다는 학생의 변화와 성장이 잘 드러나도록 작성해야 합니다.
+    - ${sourceDescription}하십시오.
+    - AI 결과는 교사가 검토하고 수정할 초안이며, 관찰 기록에 없는 사실은 만들지 마십시오.
+    - 단순 나열보다 반복적으로 관찰된 특성과 구체적인 행동 근거가 연결되도록 작성하십시오.
 
     [분석 및 작성 원칙 - **필수 준수**]
     1. **이름 언급 금지 (매우 중요):** 문장의 주어로 학생의 이름을 절대 사용하지 마십시오. 바로 "수업 시간에는...", "평소...", "친구들과..." 등으로 문장을 시작하십시오.
-    2. **분량 조절:** **5~7문장** 내외로 작성하며, 전체 길이는 **공백 포함 500~700자** 정도로 작성하십시오. 내용이 너무 짧거나 지나치게 길지 않도록 적절히 조절하십시오.
-    3. **구체적 서술:** 단순히 "착함", "성실함"이라고 쓰지 말고, 어떤 상황에서 어떻게 행동했는지 구체적인 에피소드를 근거로 서술하십시오.
-    4. **긍정적 변화 중심:** 단점은 가급적 배제하거나, 이를 극복하기 위한 노력과 성장 가능성으로 바꾸어 기술하십시오.
-    5. **문체:** '~함.', '~임.', '~보임.' 등 명사형 종결어미로 끝맺으십시오.
+    2. **분량 조절:** ${lengthGuide}로 작성하십시오.
+    3. **직접 관찰 근거:** 성격을 단정하거나 심리 상태를 추측하지 말고, 기록된 상황과 행동을 구체적으로 서술하십시오.
+    4. **지도 필요 기록 보존:** '지도 필요' 기록을 임의로 삭제하거나 긍정적으로 왜곡하지 마십시오. 반복되거나 중요한 행동은 관찰 사실 중심으로 포함하되 낙인찍는 표현을 사용하지 마십시오.
+    5. **변화의 사실성:** 지도 후 변화가 기록에 있을 때만 변화를 서술하고, 기록되지 않은 반성·노력·성장 가능성을 만들어내지 마십시오.
+    6. **문체와 서식:** 모든 문장은 '~함.', '~임.', '~보임.' 등의 명사형 어미와 마침표로 끝내고, 줄바꿈 없이 온점 뒤 한 칸을 띄워 이어 쓰십시오.
+    7. **기재 제한:** 학생 이름, 공인어학시험, 교내외 대회·수상, 장학생, 자격증, 상호명·기관명 및 사교육 유발 표현을 포함하지 마십시오. 한글을 우선 사용하고 불필요한 특수문자를 쓰지 마십시오.
 
     [좋은 예시 스타일]
     "자신의 생각과 감정을 솔직하고 분명하게 표현하며, 교사의 설명을 주의 깊게 듣고 빠르게 이해하여 수업 내용에 잘 따라옴. 특히 모둠 활동에서 친구들의 의견을 경청하고 조율하는 역할을 자처하여 원만한 합의를 이끌어내는 리더십을 보임. (중략 ... 구체적 사례 포함) ... 점차 안정된 학습 태도를 형성해가고 있어 다음 학년에서의 성장이 더욱 기대됨."
@@ -314,7 +340,8 @@ export async function analyzeBehaviorRecords(
         // Add timestamp if missing
         return {
             ...result,
-            lastUpdated: new Date().toISOString()
+            lastUpdated: new Date().toISOString(),
+            mode
         };
     } catch (error) {
         console.error("Error analyzing behavior records:", error);
@@ -506,7 +533,7 @@ export async function generateSubjectComment(
     const randomStyle = styles[Math.floor(Math.random() * styles.length)];
 
     const prompt = `
-        당신은 초등학교 교사입니다. 학생의 교과별 평가 결과(수행평가)를 바탕으로 학교생활기록부 '교과학습발달상황'의 '세부능력 및 특기사항'을 작성해주세요.
+        당신은 초등학교 교사입니다. 학생의 교과별 평가 결과(수행평가)를 바탕으로 2026학년도 학교생활기록부 '교과학습발달상황'의 '성취수준 및 특기사항' 교사용 검토 초안을 작성해주세요.
 
         [학생 정보]
         - 이름: ${studentName}
@@ -524,12 +551,13 @@ export async function generateSubjectComment(
            - '점대칭도형의 성질을...', '직육면체의 부피를...' 처럼 주제어로 문장을 시작하는 것을 피하고, 동사나 부사로 문장을 시작해 보세요.
         4. **성취 수준별 기술:**
            - '잘함': 해당 영역의 성취 기준을 우수하게 도달했음을 구체적으로 묘사하세요.
-           - '보통': 해당 영역을 무난하게 수행했음을 기술하고, 긍정적인 발전 가능성을 덧붙이세요.
-           - '노력요함': 교사의 조언이나 학생의 노력하는 모습을 포함하여 긍정적인 성장 가능성을 중심으로 기술하세요. (부정적 서술 지양)
-        5. **문체:** '~함', '~임', '~보임', '~있음', '~할 수 있음' 등 명사형 종결어미로 끝맺으세요.
+           - '보통': 평가기준에 근거하여 현재 확인된 성취수준을 구체적으로 기술하세요.
+           - '노력요함': 평가기준에서 확인된 수행 수준을 사실 중심으로 기술하세요. 평가 데이터에 없는 노력, 변화, 조언 이행 또는 성장 가능성을 만들어내지 마세요.
+        5. **문체:** 모든 문장을 '~함.', '~임.', '~보임.', '~있음.', '~할 수 있음.' 등 명사형 종결어미와 마침표로 끝맺으세요.
         6. **분량:** ${sentenceCount}문장 내외로 자연스럽게 연결된 하나의 문단으로 작성하세요.
-        7. **서식:** 마크다운이나 특수기호를 사용하지 말고 줄글(Plain Text)로만 작성하세요. 
-        8. **불필요한 텍스트 금지:** 생성 과정, 사고 과정, 초안 설명 등을 절대 출력하지 마세요. 오직 생활기록부에 입력할 문장만 출력하세요.
+        7. **서식:** 줄바꿈 없이 온점 뒤 한 칸을 띄운 줄글로 작성하고, 마크다운이나 불필요한 특수기호를 사용하지 마세요.
+        8. **기재 제한:** 공인어학시험, 교내외 대회·수상, 장학생, 자격증, 상호명·기관명과 사교육 유발 표현을 포함하지 마세요.
+        9. **불필요한 텍스트 금지:** 생성 과정, 사고 과정, 초안 설명 등을 출력하지 말고 교사가 검토할 초안 본문만 출력하세요.
     `;
 
     try {

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { firestore, auth } from '../firebase';
-import { Student, Assessment, EvaluationRecord, EvaluationLevel } from '../types';
+import { Student, Assessment, EvaluationRecord, EvaluationLevel, EvaluationExceptionReason } from '../types';
 import { AppSettings } from '../App';
 import { useModal } from '../context/ModalContext';
 import { extractAssessmentPlanFromFile, generateSubjectComment } from '../services/geminiService';
@@ -12,6 +12,14 @@ interface EvaluationManagerProps {
 }
 
 type Tab = 'setup' | 'entry' | 'missing' | 'seteuk';
+
+const EVALUATION_EXCEPTION_LABELS: Record<EvaluationExceptionReason, string> = {
+    longAbsence: '장기결석으로 인한 평가 미참여',
+    transfer: '전입으로 인한 평가 미참여',
+    koreanBeginner: '한글 미해득으로 인한 평가 미참여',
+    separateEntry: '별도 입력',
+    other: '기타 사유',
+};
 
 // --- Constants & Helpers ---
 
@@ -557,9 +565,9 @@ const EvaluationEntry = ({
     students: Student[], 
     assessments: Assessment[], 
     evaluations: Record<string, Record<string, EvaluationRecord>>, 
-    onSave: (aid: string, updates: { studentId: string, level: EvaluationLevel }[]) => Promise<void>
+    onSave: (aid: string, updates: { studentId: string, level: EvaluationLevel, exceptionReason?: EvaluationExceptionReason }[]) => Promise<void>
 }) => {
-    const { showConfirm } = useModal();
+    const { showAlert, showConfirm } = useModal();
     const [selectedSemester, setSelectedSemester] = useState(getCurrentSemester()); 
     const [selectedSubject, setSelectedSubject] = useState<string>('');
     const [selectedDomain, setSelectedDomain] = useState<string>('');
@@ -567,11 +575,13 @@ const EvaluationEntry = ({
     
     // Local Draft State
     const [unsavedChanges, setUnsavedChanges] = useState<Record<string, EvaluationLevel>>({});
+    const [unsavedReasons, setUnsavedReasons] = useState<Record<string, EvaluationExceptionReason | ''>>({});
     const [isSaving, setIsSaving] = useState(false);
 
     // Reset local changes when assessment changes
     useEffect(() => {
         setUnsavedChanges({});
+        setUnsavedReasons({});
     }, [selectedAssessId]);
 
     const hasChanges = Object.keys(unsavedChanges).length > 0;
@@ -628,17 +638,23 @@ const EvaluationEntry = ({
         return currentEvaluations[studentId]?.level;
     };
 
+    const getExceptionReason = (studentId: string): EvaluationExceptionReason | '' | undefined => {
+        if (Object.prototype.hasOwnProperty.call(unsavedReasons, studentId)) return unsavedReasons[studentId];
+        return currentEvaluations[studentId]?.exceptionReason;
+    };
+
     const stats = useMemo(() => {
-        let h = 0, m = 0, l = 0, n = 0;
+        let h = 0, m = 0, l = 0, n = 0, exception = 0;
         students.forEach(s => {
             const lvl = getLevel(s.id);
             if (lvl === 'high') h++;
             else if (lvl === 'middle') m++;
             else if (lvl === 'low') l++;
-            else n++; // none or undefined
+            else if (lvl === 'none' && getExceptionReason(s.id)) exception++;
+            else n++;
         });
-        return { h, m, l, n, total: students.length, done: h+m+l };
-    }, [currentEvaluations, unsavedChanges, students]);
+        return { h, m, l, n, exception, total: students.length, done: h+m+l+exception };
+    }, [currentEvaluations, unsavedChanges, unsavedReasons, students]);
 
     const studentSections = useMemo(() => {
         const boys = students.filter(s => String(s.gender || '').trim().startsWith('남'));
@@ -660,10 +676,25 @@ const EvaluationEntry = ({
             // Toggle logic: if clicking the same level as currently selected (draft or saved), clear it (set to 'none')
             const currentLevel = getLevel(studentId);
             if (currentLevel === newLevel && newLevel !== 'none') {
+                setUnsavedReasons(reasons => {
+                    const next = { ...reasons };
+                    delete next[studentId];
+                    return next;
+                });
                 return { ...prev, [studentId]: 'none' };
             }
+            setUnsavedReasons(reasons => {
+                const next = { ...reasons };
+                delete next[studentId];
+                return next;
+            });
             return { ...prev, [studentId]: newLevel };
         });
+    };
+
+    const handleExceptionClick = (studentId: string) => {
+        setUnsavedChanges(prev => ({ ...prev, [studentId]: 'none' }));
+        setUnsavedReasons(prev => ({ ...prev, [studentId]: getExceptionReason(studentId) || '' }));
     };
 
     const handleBatchLocalUpdate = (level: EvaluationLevel) => {
@@ -671,6 +702,7 @@ const EvaluationEntry = ({
         students.forEach(s => {
             changes[s.id] = level;
         });
+        setUnsavedReasons({});
         setUnsavedChanges(prev => ({ ...prev, ...changes }));
     };
 
@@ -679,15 +711,25 @@ const EvaluationEntry = ({
         e.stopPropagation();
         
         if (!selectedAssessId) return;
+        const missingReasonStudent = Object.entries(unsavedChanges).find(([studentId, level]) =>
+            level === 'none' && Object.prototype.hasOwnProperty.call(unsavedReasons, studentId) && !unsavedReasons[studentId]
+        );
+        if (missingReasonStudent) {
+            const student = students.find(item => item.id === missingReasonStudent[0]);
+            await showAlert(`${student?.name.hangul || '학생'}의 평가 미실시 사유를 선택해 주세요.`);
+            return;
+        }
         setIsSaving(true);
         try {
             // Convert unsavedChanges map to array for parent handler
             const updates = Object.entries(unsavedChanges).map(([studentId, level]) => ({ 
                 studentId, 
-                level: level as EvaluationLevel 
+                level: level as EvaluationLevel,
+                exceptionReason: unsavedReasons[studentId] || undefined
             }));
             await onSave(selectedAssessId, updates);
             setUnsavedChanges({});
+            setUnsavedReasons({});
         } catch (e) {
             console.error(e);
         } finally {
@@ -698,6 +740,7 @@ const EvaluationEntry = ({
     const handleCancelChanges = () => {
         if (confirm("변경 사항을 취소하시겠습니까?")) {
             setUnsavedChanges({});
+            setUnsavedReasons({});
         }
     };
 
@@ -867,9 +910,9 @@ const EvaluationEntry = ({
                                                             ))}
                                                             <button
                                                                 type="button"
-                                                                onClick={() => handleLevelChange(student.id, 'none')}
+                                                                onClick={() => handleExceptionClick(student.id)}
                                                                 className={`w-10 h-7 rounded-md border transition-all font-bold text-[10px] shadow-sm ${
-                                                                    level === 'none' || !level
+                                                                    level === 'none' && Boolean(getExceptionReason(student.id) !== undefined)
                                                                     ? 'bg-gray-500 text-white border-gray-600 ring-1 ring-gray-300'
                                                                     : 'bg-white text-gray-400 border-base-300 hover:bg-gray-50 hover:text-gray-600'
                                                                 }`}
@@ -878,6 +921,16 @@ const EvaluationEntry = ({
                                                                 미실시
                                                             </button>
                                                         </div>
+                                                        {level === 'none' && getExceptionReason(student.id) !== undefined && (
+                                                            <select
+                                                                value={getExceptionReason(student.id) || ''}
+                                                                onChange={(event) => setUnsavedReasons(prev => ({ ...prev, [student.id]: event.target.value as EvaluationExceptionReason }))}
+                                                                className="col-span-3 mt-1 w-full rounded-md border border-gray-300 bg-white px-2 py-1 text-[10px] font-semibold text-gray-700"
+                                                            >
+                                                                <option value="">미실시 사유 선택</option>
+                                                                {Object.entries(EVALUATION_EXCEPTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                                                            </select>
+                                                        )}
                                                     </div>
                                                 );
                                             })}
@@ -900,7 +953,7 @@ const EvaluationEntry = ({
                                      <div className="h-full bg-primary" style={{ width: `${(stats.done / stats.total) * 100}%` }}></div>
                                  </div>
                              </div>
-                             <div className="grid grid-cols-4 gap-1.5 text-center text-[10px]">
+                             <div className="grid grid-cols-5 gap-1.5 text-center text-[10px]">
                                  <div className="bg-green-50 py-1.5 rounded border border-green-100">
                                      <div className="font-bold text-green-700 leading-none">{stats.h}</div>
                                      <div className="text-green-600 mt-0.5">잘함</div>
@@ -913,10 +966,14 @@ const EvaluationEntry = ({
                                      <div className="font-bold text-red-700 leading-none">{stats.l}</div>
                                      <div className="text-red-600 mt-0.5">노력</div>
                                  </div>
-                                 <div className="bg-gray-100 py-1.5 rounded border border-gray-200">
-                                     <div className="font-bold text-gray-700 leading-none">{stats.n}</div>
-                                     <div className="text-gray-500 mt-0.5">미실시</div>
-                                 </div>
+                                  <div className="bg-gray-100 py-1.5 rounded border border-gray-200">
+                                      <div className="font-bold text-indigo-700 leading-none">{stats.exception}</div>
+                                      <div className="text-indigo-600 mt-0.5">사유있음</div>
+                                  </div>
+                                  <div className="bg-gray-100 py-1.5 rounded border border-gray-200">
+                                      <div className="font-bold text-gray-700 leading-none">{stats.n}</div>
+                                      <div className="text-gray-500 mt-0.5">미입력</div>
+                                  </div>
                              </div>
                          </div>
 
@@ -983,7 +1040,7 @@ const MissingEvaluationView = ({ students, assessments, evaluations, onNavigateT
         sortedAssessments.forEach((assessment: Assessment) => {
             const missingStudents = students.filter(s => {
                 const record = evaluations[String(assessment.id)]?.[String(s.id)];
-                return !record || !record.level;
+                return !record || !record.level || (record.level === 'none' && !record.exceptionReason);
             });
 
             const group = grouped[String(assessment.subject)];
@@ -1000,6 +1057,15 @@ const MissingEvaluationView = ({ students, assessments, evaluations, onNavigateT
     }, [students, sortedAssessments, evaluations]);
 
     const subjectKeys = Object.keys(dataBySubject).sort(sortSubjects);
+
+    const documentedExceptions = useMemo(() => sortedAssessments.flatMap(assessment =>
+        students.flatMap(student => {
+            const record = evaluations[String(assessment.id)]?.[String(student.id)];
+            return record?.level === 'none' && record.exceptionReason
+                ? [{ assessment, student, reason: record.exceptionReason }]
+                : [];
+        })
+    ), [sortedAssessments, students, evaluations]);
 
     const getSubjectBaseColor = (subject: string) => {
         const colorClass = SUBJECT_COLORS[subject] || 'bg-gray-100 text-gray-800 border-gray-200';
@@ -1036,9 +1102,21 @@ const MissingEvaluationView = ({ students, assessments, evaluations, onNavigateT
              </div>
              
              {/* iPad Fix: Added pb-40 */}
-             {subjectKeys.length > 0 ? (
-                 <div className="flex-1 overflow-auto custom-scrollbar space-y-8 pb-40">
-                     {subjectKeys.map((subject: string) => {
+              {subjectKeys.length > 0 ? (
+                  <div className="flex-1 overflow-auto custom-scrollbar space-y-8 pb-40">
+                      {documentedExceptions.length > 0 && (
+                        <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+                          <h3 className="mb-3 text-sm font-bold text-indigo-900">사유가 기록된 평가 미실시 · {documentedExceptions.length}건</h3>
+                          <div className="flex flex-wrap gap-2">
+                            {documentedExceptions.map(({ assessment, student, reason }) => (
+                              <span key={`${assessment.id}-${student.id}`} className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-xs text-indigo-900">
+                                <strong>{student.number}.{student.name.hangul}</strong> · {assessment.subject} · {EVALUATION_EXCEPTION_LABELS[reason]}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {subjectKeys.map((subject: string) => {
                          const { incomplete, complete } = dataBySubject[subject];
                          const bgColorClass = getSubjectBaseColor(subject);
                          const textColorClass = getSubjectTextColor(subject);
@@ -1383,7 +1461,7 @@ const SubjectCommentManager = ({ students, assessments, evaluations, settings }:
              </div>
              <div className="flex-1 flex flex-col min-h-0 bg-white rounded-xl border border-base-300 shadow-sm overflow-hidden relative">
                  <div className="p-4 border-b border-base-200 flex justify-between items-center bg-base-50/50">
-                    <h3 className="font-bold text-lg text-base-content flex items-center gap-2">{subject ? <span className={`px-2 py-0.5 rounded text-sm ${getSubjectColor(subject)}`}>{subject}</span> : '교과 선택'} <span className="text-gray-400 text-sm font-medium">세부능력 및 특기사항</span></h3>
+                    <h3 className="font-bold text-lg text-base-content flex items-center gap-2">{subject ? <span className={`px-2 py-0.5 rounded text-sm ${getSubjectColor(subject)}`}>{subject}</span> : '교과 선택'} <span className="text-gray-400 text-sm font-medium">성취수준 및 특기사항</span></h3>
                     {subject && (
                         <div className="flex gap-2">
                             <button onClick={handleDeleteAllComments} disabled={isBatchGenerating} className="bg-white text-red-500 border border-red-200 px-3 py-2 rounded-lg text-sm font-bold hover:bg-red-50 transition-all flex items-center gap-1 shadow-sm" title="전체 삭제">
@@ -1399,7 +1477,12 @@ const SubjectCommentManager = ({ students, assessments, evaluations, settings }:
                          <div className="w-64"><div className="flex justify-between items-end mb-2"><span className="text-indigo-800 font-bold text-lg animate-pulse">{progress < 100 ? '세특 생성 중...' : '마무리 중...'}</span><span className="text-indigo-600 font-bold text-sm">{progress}%</span></div><div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden shadow-inner"><div className="bg-indigo-600 h-4 rounded-full transition-all duration-300 ease-out" style={{ width: `${progress}%` }}></div></div><p className="text-indigo-500 text-xs mt-3 text-center font-medium">{currentProcessingName ? `${currentProcessingName} 학생의 기록을 분석하고 있습니다.` : '잠시만 기다려주세요.'}</p></div>
                      </div>
                  )}
-                 {/* iPad Fix: Added pb-40 */}
+                  {subject && (
+                    <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800">
+                      AI 생성 결과는 참고용 초안입니다. 평가 근거와 2026 기재 지침을 대조하고 교사가 검토·수정한 뒤 NEIS에 활용하세요.
+                    </div>
+                  )}
+                  {/* iPad Fix: Added pb-40 */}
                  <div className="flex-1 overflow-y-auto custom-scrollbar p-4 bg-base-50/30 pb-40">
                     {subject ? (
                         students.map((student:any) => (
@@ -1514,18 +1597,18 @@ const EvaluationManager = ({ students, settings }: EvaluationManagerProps): Reac
       }
   };
 
-  const handleSaveEvaluations = async (assessmentId: string, updates: { studentId: string, level: EvaluationLevel }[]) => {
+  const handleSaveEvaluations = async (assessmentId: string, updates: { studentId: string, level: EvaluationLevel, exceptionReason?: EvaluationExceptionReason }[]) => {
       const user = auth.currentUser;
       if (!user) return;
 
       const batch = firestore.batch();
       const newEvalsForAssessment = { ...(evaluations[assessmentId] || {}) };
 
-      updates.forEach(({ studentId, level }) => {
+      updates.forEach(({ studentId, level, exceptionReason }) => {
           const existing = newEvalsForAssessment[studentId];
           const docId = existing ? existing.id : `${assessmentId}_${studentId}`;
           
-          if (level === 'none') {
+          if (level === 'none' && !exceptionReason) {
                // Delete/Clear if it exists
                if (existing) {
                     const ref = firestore.collection('users').doc(user.uid).collection('evaluations').doc(existing.id);
@@ -1538,6 +1621,7 @@ const EvaluationManager = ({ students, settings }: EvaluationManagerProps): Reac
                   assessmentId,
                   studentId,
                   level,
+                  ...(exceptionReason ? { exceptionReason } : {}),
                   schoolYear: settings.schoolYear || '',
                   updatedAt: Date.now()
               };

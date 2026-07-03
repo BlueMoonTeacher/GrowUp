@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Student, AnalysisResult, MonthlyTrend } from '../types';
+import { Student, AnalysisResult, MonthlyTrend, BehaviorAnalysisMode } from '../types';
 import { analyzeBehaviorRecords } from '../services/geminiService';
 import { useModal } from '../context/ModalContext';
 import { AppSettings } from '../App';
@@ -203,8 +203,12 @@ const TrendChart = ({ data }: { data: MonthlyTrend[] }) => {
 
 const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisModalProps): React.ReactElement => {
   const { showAlert } = useModal();
+  const initialMode: BehaviorAnalysisMode = student.analysisResult?.mode || 'semester1';
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AnalysisResult | null>(student.analysisResult || null);
+  const [analysisMode, setAnalysisMode] = useState<BehaviorAnalysisMode>(initialMode);
+  const [result, setResult] = useState<AnalysisResult | null>(
+    student.behaviorAnalysisResults?.[initialMode] || student.analysisResult || null
+  );
   const [error, setError] = useState<string | null>(null);
   
   // State for editable report
@@ -274,11 +278,10 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
     setLoading(true);
     setError(null);
     try {
-      // 1학기 의견(semester1Opinion)을 함께 전달하여 1년 전체 분석 요청
       const analysisData = await analyzeBehaviorRecords(
           student.name.hangul, 
           student.behaviorRecords, 
-          student.semester1Opinion,
+          analysisMode,
           settings?.geminiApiKey,
           settings?.geminiModel
       );
@@ -290,6 +293,15 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleModeChange = (mode: BehaviorAnalysisMode) => {
+    setAnalysisMode(mode);
+    setError(null);
+    const stored = student.behaviorAnalysisResults?.[mode]
+      || (student.analysisResult?.mode === mode ? student.analysisResult : null);
+    setResult(stored || null);
+    setEditableReport(stored?.report || '');
   };
 
   const handleSaveReport = async () => {
@@ -314,6 +326,18 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
     });
   };
 
+  const draftWarnings = useMemo(() => {
+    if (!editableReport.trim()) return [];
+    const warnings: string[] = [];
+    if (/\r|\n/.test(editableReport)) warnings.push('줄바꿈이 포함되어 있음');
+    if (!editableReport.trim().endsWith('.')) warnings.push('마침표로 끝나지 않음');
+    if (editableReport.includes(student.name.hangul)) warnings.push('학생 이름이 포함되어 있음');
+    const restrictedTerms = ['레고', '엔트리', '유튜브', '줌', '굿네이버스', '커리어넷', '공인어학시험', '자격증', '장학생'];
+    const foundTerms = restrictedTerms.filter(term => editableReport.includes(term));
+    if (foundTerms.length) warnings.push(`기재 제한 표현 확인: ${foundTerms.join(', ')}`);
+    return warnings;
+  }, [editableReport, student.name.hangul]);
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[120] p-4" onClick={onClose}>
       <div className="bg-base-100 rounded-2xl shadow-2xl w-full max-w-[90vw] h-[90vh] flex flex-col overflow-hidden border border-base-300" onClick={e => e.stopPropagation()}>
@@ -324,7 +348,7 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
             <div className="bg-primary/10 p-2 rounded-lg text-2xl">✨</div>
             <div>
               <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-bold text-base-content">AI 행동 발달 분석 및 생기부 작성</h2>
+                  <h2 className="text-xl font-bold text-base-content">AI 행동 발달 분석 및 기록 초안</h2>
                   {result && (
                     <span className="text-[10px] bg-base-200 px-2 py-0.5 rounded-full text-base-content-secondary border border-base-300">
                         최근 분석: {new Date(result.lastUpdated).toLocaleDateString()}
@@ -334,6 +358,10 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
               <p className="text-xs text-base-content-secondary font-medium mt-0.5">
                   {student.grade}학년 {student.class}반 {student.name.hangul} 학생
               </p>
+              <div className="mt-2 flex rounded-lg border border-base-300 bg-white p-0.5 w-fit">
+                <button type="button" onClick={() => handleModeChange('semester1')} title="3월부터 8월까지의 기록만 분석" className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${analysisMode === 'semester1' ? 'bg-primary text-white' : 'text-base-content-secondary hover:bg-base-100'}`}>1학기용 · 3~8월</button>
+                <button type="button" onClick={() => handleModeChange('yearEnd')} title="학년도 전체 누적 기록을 분석" className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${analysisMode === 'yearEnd' ? 'bg-primary text-white' : 'text-base-content-secondary hover:bg-base-100'}`}>학년말용 · 전체</button>
+              </div>
             </div>
           </div>
           <button onClick={onClose} className="text-base-content-secondary hover:text-base-content p-2 rounded-full hover:bg-base-200 transition-colors">
@@ -354,7 +382,7 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
               </div>
               <div className="text-center">
                   <p className="text-xl font-bold text-base-content animate-pulse">Gemini가 기록을 분석하고 있습니다</p>
-                  <p className="text-sm text-base-content-secondary mt-2">행동 패턴을 시각화하고 생기부 초안을 작성 중입니다...</p>
+                  <p className="text-sm text-base-content-secondary mt-2">{analysisMode === 'semester1' ? '1학기' : '학년말'} 행동특성 및 종합의견 초안을 작성 중입니다...</p>
               </div>
             </div>
           ) : error ? (
@@ -422,7 +450,7 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                         <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
                                     </svg>
-                                    학교생활기록부 작성 예시
+                                    {result.mode === 'yearEnd' ? '학년말' : '1학기'} 기록 초안
                                 </h3>
                                 <div className="flex gap-1.5">
                                     <button 
@@ -466,14 +494,19 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
                                 placeholder="분석된 내용이 여기에 표시됩니다. 직접 수정할 수 있습니다."
                             />
                             
-                            <div className="p-2.5 bg-blue-50/30 border-t border-blue-100 text-xs text-blue-600/70 flex items-start gap-1.5 shrink-0">
+                            <div className="p-2.5 bg-amber-50 border-t border-amber-200 text-xs text-amber-800 flex items-start gap-1.5 shrink-0">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0 mt-0.5" viewBox="0 0 20 20" fill="currentColor">
                                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                                 </svg>
                                 <span>
-                                    내용을 직접 수정하세요. '저장' 버튼을 누르면 수정된 내용이 유지됩니다.
+                                    AI가 생성한 참고용 초안입니다. 직접 관찰한 기록 및 2026 기재 지침과 대조하고, 교사가 검토·수정한 뒤 NEIS에 활용하세요.
                                 </span>
                             </div>
+                            {draftWarnings.length > 0 && (
+                              <div className="border-t border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-semibold text-rose-700 shrink-0">
+                                확인 필요 · {draftWarnings.join(' · ')}
+                              </div>
+                            )}
                         </div>
                     </div>
 
@@ -509,12 +542,20 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
 
                 </div>
             </div>
-          ) : null}
+          ) : (
+            <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+              <div className="rounded-full bg-primary/10 p-4 text-3xl">✨</div>
+              <div>
+                <p className="font-bold text-base-content">저장된 {analysisMode === 'semester1' ? '1학기' : '학년말'} 초안이 없습니다.</p>
+                <p className="mt-1 text-sm text-base-content-secondary">아래 생성 버튼을 눌러 현재 누가기록을 바탕으로 초안을 만드세요.</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="px-6 py-3 border-t border-base-300 bg-base-100 flex justify-end items-center gap-3 shrink-0">
-             {!loading && result && (
+             {!loading && (
                 <button 
                     onClick={handleAnalyze}
                     className="px-4 py-2 bg-base-200 text-base-content font-bold rounded-lg hover:bg-base-300 transition-colors text-sm flex items-center gap-2"
@@ -522,7 +563,7 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                    재분석
+                    {analysisMode === 'semester1' ? '1학기 초안 생성' : '학년말 초안 생성'}
                 </button>
             )}
             <button 

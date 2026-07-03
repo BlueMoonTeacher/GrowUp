@@ -18,13 +18,21 @@ export interface AfterSchoolActivity {
   schedule: string;
 }
 
+export type BehaviorObservationType = 'positive' | 'neutral' | 'guidance';
+
 export interface BehaviorRecord {
   id: string;
   date: string; // YYYY-MM-DD
   period: string;
   content: string;
   timestamp: number;
+  observationType?: BehaviorObservationType;
+  observationTypeSource?: 'auto' | 'manual';
+  context?: string;
+  followUp?: string;
 }
+
+export type BehaviorAnalysisMode = 'semester1' | 'yearEnd';
 
 export interface MonthlyTrend {
   month: string; // YYYY-MM format
@@ -43,6 +51,7 @@ export interface AnalysisResult {
     content: string;
   }[];
   lastUpdated: string; // ISO Date string
+  mode?: BehaviorAnalysisMode;
 }
 
 export type AttendanceType = '결석' | '지각' | '조퇴' | '결과';
@@ -192,7 +201,8 @@ export interface Student {
   behaviorRecords?: BehaviorRecord[];
   attendanceRecords?: AttendanceRecord[];
   analysisResult?: AnalysisResult;
-  semester1Opinion?: string; // 1학기 행동 특성 및 종합의견
+  behaviorAnalysisResults?: Partial<Record<BehaviorAnalysisMode, AnalysisResult>>;
+  semester1Opinion?: string; // 이전 데이터 호환용(새 화면에서는 사용하지 않음)
 }
 
 // --- Evaluation Types ---
@@ -216,12 +226,14 @@ export interface Assessment {
 }
 
 export type EvaluationLevel = 'high' | 'middle' | 'low' | 'none';
+export type EvaluationExceptionReason = 'longAbsence' | 'transfer' | 'koreanBeginner' | 'separateEntry' | 'other';
 
 export interface EvaluationRecord {
   id: string;
   assessmentId: string;
   studentId: string;
   level: EvaluationLevel;
+  exceptionReason?: EvaluationExceptionReason;
   schoolYear: string;
   updatedAt: number;
 }

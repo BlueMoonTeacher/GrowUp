@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Student } from './types';
 import Dashboard from './components/Dashboard';
 import StudentForm from './components/StudentForm';
@@ -31,11 +31,14 @@ export interface AppSettings {
 
 const App = (): React.ReactElement => {
   const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
+  const [isClassMenuOpen, setIsClassMenuOpen] = useState(false);
+  const classMenuRef = useRef<HTMLDivElement>(null);
   const {
     user,
     authLoading,
     isDataLoading,
     isLoading,
+    isClassSwitching,
     view,
     setView,
     students,
@@ -58,9 +61,24 @@ const App = (): React.ReactElement => {
     handleAddBehaviorRecord,
     handleDeleteBehaviorRecord,
     handleSaveSettings,
+    handleSwitchClass,
     handleLogout,
     schoolYearsFromData
   } = useAppLogic();
+
+  const classEntries = useMemo(() => {
+    const registered = (settings.schoolYearEntries || []).filter(entry => entry.schoolYear && entry.grade && entry.class);
+    const entries = registered.length > 0
+      ? registered
+      : settings.schoolYear && settings.grade && settings.class
+        ? [{ schoolYear: settings.schoolYear, grade: settings.grade, class: settings.class, active: true }]
+        : [];
+    return [...entries].sort((a, b) =>
+      b.schoolYear.localeCompare(a.schoolYear, 'ko', { numeric: true })
+      || a.grade.localeCompare(b.grade, 'ko', { numeric: true })
+      || a.class.localeCompare(b.class, 'ko', { numeric: true })
+    );
+  }, [settings.schoolYearEntries, settings.schoolYear, settings.grade, settings.class]);
 
   const closeHeaderMenu = () => setIsHeaderMenuOpen(false);
 
@@ -102,6 +120,22 @@ const App = (): React.ReactElement => {
     favicon.href = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌱</text></svg>";
     document.head.appendChild(favicon);
   }, []);
+
+  useEffect(() => {
+    if (!isClassMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!classMenuRef.current?.contains(event.target as Node)) setIsClassMenuOpen(false);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsClassMenuOpen(false);
+    };
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleEscape);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [isClassMenuOpen]);
 
   if (authLoading) {
     return (
@@ -160,27 +194,75 @@ const App = (): React.ReactElement => {
       <header className="relative z-[80] bg-base-100 shadow-md border-b border-base-300/70 shrink-0">
         <div className="w-full px-1 sm:px-4 lg:px-6">
           <div className="flex justify-between items-center py-2 sm:py-3">
-            <div className="flex items-center space-x-2 sm:space-x-3 truncate">
-              <button onClick={() => setView('dashboard')} className="flex items-center space-x-2 sm:space-x-3 focus:outline-none">
+            <div className="flex min-w-0 items-center space-x-2 sm:space-x-3">
+              <button onClick={() => setView('dashboard')} className="flex min-w-0 items-center space-x-2 sm:space-x-3 focus:outline-none">
                 <GrowthLogo variant="header" />
-                <div className="flex flex-col sm:flex-row sm:items-baseline sm:gap-2 truncate text-left">
-                  <h1 className="text-lg sm:text-2xl font-bold text-base-content tracking-tight truncate flex items-center gap-1.5">
-                    {settings.school && settings.grade && settings.class ? (
-                      <>
-                        <span className="truncate max-w-[130px] xs:max-w-[160px] sm:max-w-[260px] xl:max-w-none">{settings.school}</span>
-                        <span className="text-primary whitespace-nowrap text-sm sm:text-lg">{settings.grade}학년 {settings.class}반</span>
-                      </>
-                    ) : (
-                      <span className="truncate max-w-[180px] sm:max-w-none">학급 성장 기록장</span>
-                    )}
-                  </h1>
-                  {settings.schoolYear && (
-                    <span className="text-[10px] sm:text-xs font-bold text-base-content-secondary bg-base-200 px-1.5 py-0.5 rounded-full border border-base-300 hidden sm:inline-block">
-                      {settings.schoolYear}학년도
-                    </span>
+                <h1 className="truncate text-left text-lg font-bold tracking-tight text-base-content sm:max-w-[260px] sm:text-2xl xl:max-w-none">
+                  {settings.school || '학급 성장 기록장'}
+                </h1>
+              </button>
+              {settings.school && settings.grade && settings.class && (
+                <div ref={classMenuRef} className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsClassMenuOpen(open => !open)}
+                    disabled={isClassSwitching}
+                    className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-sm font-bold text-primary transition-colors hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-wait disabled:opacity-60 sm:text-lg"
+                    aria-haspopup="menu"
+                    aria-expanded={isClassMenuOpen}
+                    title="등록된 학급 전환"
+                  >
+                    {isClassSwitching && <span className="loading loading-spinner loading-xs" />}
+                    <span className="whitespace-nowrap">{settings.grade}학년 {settings.class}반</span>
+                  </button>
+                  {isClassMenuOpen && (
+                    <div className="absolute left-0 top-full z-[120] mt-2 w-64 overflow-hidden rounded-xl border border-base-300 bg-white shadow-2xl" role="menu">
+                      <div className="border-b border-base-200 px-3 py-2">
+                        <p className="text-xs font-bold text-base-content-secondary">학년도·학급 전환</p>
+                      </div>
+                      <div className="max-h-72 overflow-y-auto p-1.5 custom-scrollbar">
+                        {classEntries.map(entry => {
+                          const isActive = entry.schoolYear === settings.schoolYear && entry.grade === settings.grade && entry.class === settings.class;
+                          return (
+                            <button
+                              key={`${entry.schoolYear}-${entry.grade}-${entry.class}`}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={isActive}
+                              onClick={async () => {
+                                setIsClassMenuOpen(false);
+                                await handleSwitchClass(entry);
+                              }}
+                              className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors ${isActive ? 'bg-primary/10 text-primary' : 'text-base-content hover:bg-base-100'}`}
+                            >
+                              <span>
+                                <span className="block text-sm font-bold">{entry.grade}학년 {entry.class}반</span>
+                                <span className="block text-xs text-base-content-secondary">{entry.schoolYear}학년도</span>
+                              </span>
+                              {isActive && <span className="text-base font-black" aria-hidden="true">✓</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsClassMenuOpen(false);
+                          setIsSettingsModalOpen(true);
+                        }}
+                        className="w-full border-t border-base-200 px-3 py-2 text-left text-xs font-bold text-base-content-secondary hover:bg-base-100"
+                      >
+                        학급 목록 관리 · 설정
+                      </button>
+                    </div>
                   )}
                 </div>
-              </button>
+              )}
+              {settings.schoolYear && (
+                <span className="hidden whitespace-nowrap rounded-full border border-base-300 bg-base-200 px-1.5 py-0.5 text-[10px] font-bold text-base-content-secondary sm:inline-block sm:text-xs">
+                  {settings.schoolYear}학년도
+                </span>
+              )}
             </div>
 
             {(view === 'dashboard' || view === 'notice') && (

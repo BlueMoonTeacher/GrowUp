@@ -409,6 +409,8 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                             {attendanceViewMode === 'overview' ? (
                                 <AttendanceOverview
                                     students={students}
+                                    settings={settings}
+                                    onUpdateStudent={onUpdateStudent}
                                     onSelectStudent={(student) => {
                                         onSelectStudent(student);
                                         setAttendanceViewMode('individual');

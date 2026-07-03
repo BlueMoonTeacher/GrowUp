@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Student, AttendanceRecord, AttendanceType, AttendanceCategory } from '../types';
-import { getAttendanceSymbol, ATTENDANCE_TYPES, CATEGORIES } from '../utils/attendanceUtils';
+import { getAttendanceSymbol, getAttendanceSymbolColorClass, ATTENDANCE_TYPES, CATEGORIES } from '../utils/attendanceUtils';
 import { AppSettings } from '../App';
 import { useModal } from '../context/ModalContext';
 
@@ -365,7 +365,7 @@ const AttendanceLog = ({ student, onUpdateStudent, settings }: AttendanceLogProp
                                 <span className={`text-xs font-medium mb-1 self-start ml-1 ${isHighlighted ? 'text-primary font-bold' : 'text-base-content-secondary'}`}>{day}</span>
                                 {record && (
                                     <div className="flex flex-col items-center w-full mt-0.5">
-                                        <span className="text-sm leading-none filter drop-shadow-sm" title={`${record.type} - ${record.category}`}>
+                                        <span className={`text-xl font-black leading-none ${getAttendanceSymbolColorClass(record.category)}`} title={`${record.type} - ${record.category}`}>
                                             {getAttendanceSymbol(record.type, record.category)}
                                         </span>
                                     </div>
@@ -469,7 +469,10 @@ const AttendanceLog = ({ student, onUpdateStudent, settings }: AttendanceLogProp
                                         }
                                     `}
                                 >
-                                    <span className="text-lg font-bold">{t.label}</span>
+                                    <span className={`text-2xl font-black ${getAttendanceSymbolColorClass(formCategory)}`}>
+                                        {getAttendanceSymbol(t.type, formCategory)}
+                                    </span>
+                                    <span className="text-sm font-bold">{t.label}</span>
                                 </button>
                             ))}
                         </div>
@@ -492,7 +495,7 @@ const AttendanceLog = ({ student, onUpdateStudent, settings }: AttendanceLogProp
                                     `}
                                 >
                                     <div className="flex items-center gap-2">
-                                        <span className="text-base">{getAttendanceSymbol(formType, c.category)}</span>
+                                        <span className={`text-xl font-black ${getAttendanceSymbolColorClass(c.category)}`}>{getAttendanceSymbol(formType, c.category)}</span>
                                         <span>{c.label}</span>
                                     </div>
                                 </button>

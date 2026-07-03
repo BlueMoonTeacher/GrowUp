@@ -778,9 +778,9 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
     const [scheduleDrafts, setScheduleDrafts] = useState<ExtractedScheduleDraft[]>([]);
     const [captureMessage, setCaptureMessage] = useState('');
     const [editingId, setEditingId] = useState<string | null>(null);
-    const [hasEndTime, setHasEndTime] = useState(false);
     const [copyDateInput, setCopyDateInput] = useState('');
     const [copyDates, setCopyDates] = useState<string[]>([]);
+    const [isCopySectionOpen, setIsCopySectionOpen] = useState(false);
     const [isCopying, setIsCopying] = useState(false);
     const [pendingScheduleImages, setPendingScheduleImages] = useState<PendingScheduleImage[]>([]);
     const [isSavingEvent, setIsSavingEvent] = useState(false);
@@ -919,7 +919,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
             await showAlert("일정 내용을 입력해주세요.");
             return;
         }
-        if (hasEndTime && (!formData.time || !formData.endTime || formData.endTime <= formData.time)) {
+        if (formData.endTime && (!formData.time || formData.endTime <= formData.time)) {
             await showAlert("종료시간은 시작시간보다 뒤여야 합니다.");
             return;
         }
@@ -933,7 +933,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                 : [];
             const eventData = {
                 ...formData,
-                endTime: hasEndTime ? formData.endTime || '' : '',
+                endTime: formData.endTime || '',
                 attachments: [...(formData.attachments || []), ...uploadedAttachments],
             };
             if (editingId) {
@@ -1044,6 +1044,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
         setCaptureMessage('');
         setCopyDates([]);
         setCopyDateInput('');
+        setIsCopySectionOpen(false);
         if (event) {
             setEditingId(event.id);
             setFormData({
@@ -1057,7 +1058,6 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                 memo: event.memo,
                 attachments: event.attachments || [],
             });
-            setHasEndTime(Boolean(event.endTime));
         } else {
             setEditingId(null);
             resetForm();
@@ -1080,7 +1080,6 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
             memo: draft.memo || '',
             isCompleted: false,
         }));
-        setHasEndTime(Boolean(draft.endTime));
         setCaptureMessage(`"${draft.title}" 이렇게 등록할까요? 필요하면 아래에서 수정해 주세요.`);
     };
 
@@ -1164,7 +1163,6 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
             memo: '',
             attachments: [],
         });
-        setHasEndTime(false);
         setCopyDates([]);
         setCopyDateInput('');
         clearPendingScheduleImages();
@@ -1188,7 +1186,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
             await showAlert('일정 내용을 입력해주세요.');
             return;
         }
-        if (hasEndTime && (!formData.time || !formData.endTime || formData.endTime <= formData.time)) {
+        if (formData.endTime && (!formData.time || formData.endTime <= formData.time)) {
             await showAlert('종료시간은 시작시간보다 뒤여야 합니다.');
             return;
         }
@@ -1197,7 +1195,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
         try {
             const eventData = {
                 ...formData,
-                endTime: hasEndTime ? formData.endTime || '' : '',
+                endTime: formData.endTime || '',
             };
             const collectionRef = firestore.collection('users').doc(user.uid).collection('schedules');
             const batch = firestore.batch();
@@ -1790,16 +1788,16 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
 
             {/* Modals ... */}
             {isEventModalOpen && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={closeEventModal}>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-2 backdrop-blur-sm sm:p-4" onClick={closeEventModal}>
                     {/* ... (Existing Modal Content) ... */}
                     <div
-                        className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[92dvh] overflow-y-auto custom-scrollbar border border-base-300"
+                        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-base-300 bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]"
                         onClick={e => e.stopPropagation()}
                         onPaste={handleScheduleCapturePaste}
                         onKeyDown={handleEventModalKeyDown}
                     >
-                        <div className="p-6">
-                            <div className="flex justify-between items-start mb-6">
+                        <div className="shrink-0 border-b border-base-200 bg-white px-4 py-3 sm:px-6 sm:py-4">
+                            <div className="flex items-center justify-between">
                                 <h3 className="text-xl font-bold text-base-content">
                                     {editingId ? '일정 수정' : '새 일정 등록'}
                                 </h3>
@@ -1809,7 +1807,9 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                     </svg>
                                 </button>
                             </div>
+                        </div>
 
+                        <div className="min-h-0 flex-1 overflow-y-auto p-4 custom-scrollbar sm:p-6">
                             <div className="space-y-4">
                                 {!editingId && (
                                     <div
@@ -1852,7 +1852,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                         )}
                                     </div>
                                 )}
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                                     <div>
                                         <label className="block text-xs font-bold text-base-content-secondary mb-1.5">날짜</label>
                                         <input
@@ -1871,70 +1871,69 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                             className="w-full p-2.5 bg-white border border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm text-base-content shadow-sm"
                                         />
                                     </div>
-                                </div>
-
-                                <div className="rounded-xl border border-base-200 bg-base-50 p-3">
-                                    <label className="flex cursor-pointer items-center justify-between gap-3">
-                                        <span>
-                                            <span className="block text-sm font-bold text-base-content">종료시간 입력</span>
-                                            <span className="block text-xs text-base-content-secondary">필요할 때만 켜 주세요.</span>
-                                        </span>
+                                    <div>
+                                        <label className="block text-xs font-bold text-base-content-secondary mb-1.5">종료시간 <span className="font-medium text-base-content-secondary/70">(선택)</span></label>
                                         <input
-                                            type="checkbox"
-                                            checked={hasEndTime}
-                                            onChange={(e) => setHasEndTime(e.target.checked)}
-                                            className="checkbox checkbox-sm"
+                                            type="time"
+                                            value={formData.endTime || ''}
+                                            onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                                            className="w-full p-2.5 bg-white border border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm text-base-content shadow-sm"
                                         />
-                                    </label>
-                                    {hasEndTime && (
-                                        <div className="mt-3">
-                                            <label className="block text-xs font-bold text-base-content-secondary mb-1.5">종료시간</label>
-                                            <input
-                                                type="time"
-                                                value={formData.endTime || ''}
-                                                onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
-                                                className="w-full p-2.5 bg-white border border-base-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-sm text-base-content shadow-sm"
-                                            />
-                                        </div>
-                                    )}
+                                    </div>
                                 </div>
 
                                 {editingId && (
-                                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
-                                        <div className="mb-2">
-                                            <p className="text-sm font-bold text-base-content">다른 날짜로 복사</p>
-                                            <p className="text-xs text-base-content-secondary">날짜를 하나씩 추가한 뒤, 복사하기를 눌러 한 번에 등록하세요.</p>
-                                        </div>
+                                    <div className={`overflow-hidden rounded-xl border transition-colors ${isCopySectionOpen ? 'border-primary/20 bg-primary/5' : 'border-base-200 bg-base-50'}`}>
                                         <button
                                             type="button"
-                                            onClick={handleCopyEvent}
-                                            disabled={copyDates.length === 0 || isCopying}
-                                            className="mb-3 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-bold text-primary-content shadow-sm hover:bg-primary-focus disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                                            onClick={() => setIsCopySectionOpen(open => !open)}
+                                            disabled={isCopying}
+                                            className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left hover:bg-primary/5 disabled:cursor-wait"
+                                            aria-expanded={isCopySectionOpen}
                                         >
-                                            {isCopying && <span className="loading loading-spinner loading-xs" />}
-                                            {copyDates.length > 0 ? `선택한 ${copyDates.length}개 날짜로 복사하기` : '복사할 날짜를 추가해 주세요'}
+                                            <span>
+                                                <span className="block text-sm font-bold text-base-content">다른 날짜로 복사하기</span>
+                                                {!isCopySectionOpen && <span className="block text-xs text-base-content-secondary">필요할 때 펼쳐서 사용하세요.</span>}
+                                            </span>
+                                            <svg className={`h-5 w-5 shrink-0 text-base-content-secondary transition-transform ${isCopySectionOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                                <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                            </svg>
                                         </button>
-                                        <label className="mb-1.5 block text-xs font-bold text-base-content-secondary">복사할 날짜 추가</label>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="date"
-                                                value={copyDateInput}
-                                                min="2000-01-01"
-                                                onChange={(e) => setCopyDateInput(e.target.value)}
-                                                onKeyDown={(e) => e.stopPropagation()}
-                                                className="min-w-0 flex-1 p-2 bg-white border border-base-300 rounded-lg text-sm"
-                                            />
-                                            <button type="button" onClick={addCopyDate} disabled={!copyDateInput || copyDateInput === formData.date || copyDates.length >= 20 || isCopying} className="shrink-0 rounded-lg border border-primary bg-white px-3 py-2 text-xs font-bold text-primary disabled:cursor-not-allowed disabled:opacity-40">
-                                                날짜 추가
-                                            </button>
-                                        </div>
-                                        {copyDates.length > 0 && (
-                                            <div className="mt-2 flex flex-wrap gap-1.5">
-                                                {copyDates.map(date => (
-                                                    <button key={date} type="button" onClick={() => setCopyDates(prev => prev.filter(d => d !== date))} className="rounded-full border border-primary/20 bg-white px-2.5 py-1 text-xs font-bold text-primary hover:bg-red-50 hover:text-red-600" title="복사 날짜에서 제거">
-                                                        {date} ×
+                                        {isCopySectionOpen && (
+                                            <div className="border-t border-primary/10 px-3 pb-3 pt-3">
+                                                <p className="mb-3 text-xs text-base-content-secondary">날짜를 하나씩 추가한 뒤, 복사하기를 눌러 한 번에 등록하세요.</p>
+                                                <label className="mb-1.5 block text-xs font-bold text-base-content-secondary">복사할 날짜 추가</label>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="date"
+                                                        value={copyDateInput}
+                                                        min="2000-01-01"
+                                                        onChange={(e) => setCopyDateInput(e.target.value)}
+                                                        onKeyDown={(e) => e.stopPropagation()}
+                                                        className="min-w-0 flex-1 rounded-lg border border-base-300 bg-white p-2 text-sm"
+                                                    />
+                                                    <button type="button" onClick={addCopyDate} disabled={!copyDateInput || copyDateInput === formData.date || copyDates.length >= 20 || isCopying} className="shrink-0 rounded-lg border border-primary bg-white px-3 py-2 text-xs font-bold text-primary disabled:cursor-not-allowed disabled:opacity-40">
+                                                        날짜 추가
                                                     </button>
-                                                ))}
+                                                </div>
+                                                {copyDates.length > 0 && (
+                                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                                        {copyDates.map(date => (
+                                                            <button key={date} type="button" onClick={() => setCopyDates(prev => prev.filter(d => d !== date))} className="rounded-full border border-primary/20 bg-white px-2.5 py-1 text-xs font-bold text-primary hover:bg-red-50 hover:text-red-600" title="복사 날짜에서 제거">
+                                                                {date} ×
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCopyEvent}
+                                                    disabled={copyDates.length === 0 || isCopying}
+                                                    className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-bold text-primary-content shadow-sm hover:bg-primary-focus disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-500"
+                                                >
+                                                    {isCopying && <span className="loading loading-spinner loading-xs" />}
+                                                    {copyDates.length > 0 ? `선택한 ${copyDates.length}개 날짜로 복사하기` : '복사할 날짜를 추가해 주세요'}
+                                                </button>
                                             </div>
                                         )}
                                     </div>
@@ -2060,8 +2059,9 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                     )}
                                 </div>
                             </div>
+                        </div>
 
-                            <div className="flex justify-between items-center mt-8 pt-4 border-t border-base-200">
+                            <div className="flex shrink-0 items-center justify-between border-t border-base-200 bg-white px-4 py-3 sm:px-6 sm:py-4">
                                 {editingId ? (
                                     <button
                                         onClick={handleDeleteEvent}
@@ -2090,14 +2090,13 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                     </button>
                                 </div>
                             </div>
-                        </div>
                     </div>
                 </div>
             )}
 
             {imagePreview && (
                 <div
-                    className="fixed inset-0 z-[90] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm sm:p-8"
+                    className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm sm:p-8"
                     onClick={() => setImagePreview(null)}
                     role="dialog"
                     aria-modal="true"

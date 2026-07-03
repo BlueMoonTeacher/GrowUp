@@ -187,7 +187,7 @@ const SettingsModal = ({ currentSettings, schoolYearsFromData = [], onSave, onCl
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div
         className="bg-base-100 rounded-xl shadow-2xl p-8 w-full max-w-5xl m-4 transform transition-all border border-base-300 max-h-[90vh] overflow-y-auto custom-scrollbar"
         onKeyDown={handleKeyDown}

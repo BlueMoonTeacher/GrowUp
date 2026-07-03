@@ -33,6 +33,7 @@ export const useAppLogic = () => {
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
     const [editingStudent, setEditingStudent] = useState<Student | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [isClassSwitching, setIsClassSwitching] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
     const [user, setUser] = useState<any | null>(null);
@@ -50,7 +51,7 @@ export const useAppLogic = () => {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const fetchStudents = async (uid: string, schoolYear: string) => {
+    const fetchStudents = async (uid: string, schoolYear: string, grade: string, className: string) => {
         try {
             const snapshot = await firestore.collection('users').doc(uid).collection('students').orderBy('name.hangul').get();
             const allStudents = snapshot.docs.map((doc: any) => ({
@@ -60,7 +61,9 @@ export const useAppLogic = () => {
 
             const filtered = allStudents.filter(s => {
                 const studentYear = s.schoolYear || "2025";
-                return studentYear === schoolYear;
+                return studentYear === schoolYear
+                    && String(s.grade || '').trim() === String(grade || '').trim()
+                    && String(s.class || '').trim() === String(className || '').trim();
             });
 
             setStudents(filtered);
@@ -114,7 +117,12 @@ export const useAppLogic = () => {
                         setIsInitialSetupRequired(false);
                     }
 
-                    await fetchStudents(currentUser.uid, newSettings.schoolYear || defaultSchoolYear);
+                    await fetchStudents(
+                        currentUser.uid,
+                        newSettings.schoolYear || defaultSchoolYear,
+                        newSettings.grade,
+                        newSettings.class
+                    );
 
                 } catch (error) {
                     console.error("Error fetching data from Firestore:", error);
@@ -409,8 +417,11 @@ export const useAppLogic = () => {
 
             setSettings(newSettings);
 
-            if (newSettings.schoolYear !== settings.schoolYear) {
-                await fetchStudents(user.uid, newSettings.schoolYear || '');
+            const activeClassChanged = newSettings.schoolYear !== settings.schoolYear
+                || newSettings.grade !== settings.grade
+                || newSettings.class !== settings.class;
+            if (activeClassChanged) {
+                await fetchStudents(user.uid, newSettings.schoolYear || '', newSettings.grade, newSettings.class);
                 setSelectedStudent(null);
                 setView('dashboard');
             }
@@ -422,6 +433,40 @@ export const useAppLogic = () => {
         } catch (error) {
             console.error("Error saving settings to Firestore:", error);
             await showAlert("설정 저장 중 오류가 발생했습니다.");
+        }
+    };
+
+    const handleSwitchClass = async (entry: SchoolYearEntry) => {
+        if (!user || isClassSwitching) return;
+        if (entry.schoolYear === settings.schoolYear && entry.grade === settings.grade && entry.class === settings.class) return;
+
+        setIsClassSwitching(true);
+        try {
+            const nextEntries = (settings.schoolYearEntries || []).map(item => ({
+                ...item,
+                active: item.schoolYear === entry.schoolYear && item.grade === entry.grade && item.class === entry.class
+            }));
+            const nextSettings: AppSettings = {
+                ...settings,
+                schoolYearEntries: nextEntries,
+                schoolYear: entry.schoolYear,
+                grade: entry.grade,
+                class: entry.class
+            };
+
+            const settingsRef = firestore.collection('users').doc(user.uid).collection('appData').doc('settings');
+            await settingsRef.set(nextSettings, { merge: true });
+            await fetchStudents(user.uid, entry.schoolYear, entry.grade, entry.class);
+
+            setSettings(nextSettings);
+            setSelectedStudent(null);
+            setEditingStudent(null);
+            setView('dashboard');
+        } catch (error) {
+            console.error('Error switching class:', error);
+            await showAlert('학급을 전환하는 중 오류가 발생했습니다.');
+        } finally {
+            setIsClassSwitching(false);
         }
     };
 
@@ -439,6 +484,7 @@ export const useAppLogic = () => {
         isDataLoading,
         isLoading,
         setIsLoading,
+        isClassSwitching,
         view,
         setView,
         students,
@@ -461,6 +507,7 @@ export const useAppLogic = () => {
         handleAddBehaviorRecord,
         handleDeleteBehaviorRecord,
         handleSaveSettings,
+        handleSwitchClass,
         handleLogout,
         schoolYearsFromData
     };

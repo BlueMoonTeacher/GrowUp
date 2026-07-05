@@ -9,8 +9,7 @@ const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
 // Days for the timetable (Mon-Fri)
 const SCHOOL_DAYS = [1, 2, 3, 4, 5];
 
-// Default Subjects including 1-2 grades
-const DEFAULT_SUBJECTS: SubjectSetting[] = [
+const ALL_DEFAULT_SUBJECTS: SubjectSetting[] = [
     { name: '국어', color: 'bg-red-100 text-red-800 border-red-200' },
     { name: '수학', color: 'bg-blue-100 text-blue-800 border-blue-200' },
     { name: '사회', color: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
@@ -29,39 +28,76 @@ const DEFAULT_SUBJECTS: SubjectSetting[] = [
     { name: '즐생', color: 'bg-rose-100 text-rose-800 border-rose-200' },
 ];
 
-// Expanded Color Palette for User Customization
-const COLOR_PALETTE = [
-    { name: 'Red', class: 'bg-red-100 text-red-800 border-red-200', code: '#fee2e2' },
-    { name: 'Orange', class: 'bg-orange-100 text-orange-800 border-orange-200', code: '#ffedd5' },
-    { name: 'Amber', class: 'bg-amber-100 text-amber-800 border-amber-200', code: '#fef3c7' },
-    { name: 'Yellow', class: 'bg-yellow-100 text-yellow-800 border-yellow-200', code: '#fef9c3' },
-    { name: 'Lime', class: 'bg-lime-100 text-lime-800 border-lime-200', code: '#ecfccb' },
-    { name: 'Green', class: 'bg-green-100 text-green-800 border-green-200', code: '#dcfce7' },
-    { name: 'Emerald', class: 'bg-emerald-100 text-emerald-800 border-emerald-200', code: '#d1fae5' },
-    { name: 'Teal', class: 'bg-teal-100 text-teal-800 border-teal-200', code: '#ccfbf1' },
-    { name: 'Cyan', class: 'bg-cyan-100 text-cyan-800 border-cyan-200', code: '#cffafe' },
-    { name: 'Sky', class: 'bg-sky-100 text-sky-800 border-sky-200', code: '#e0f2fe' },
-    { name: 'Blue', class: 'bg-blue-100 text-blue-800 border-blue-200', code: '#dbeafe' },
-    { name: 'Indigo', class: 'bg-indigo-100 text-indigo-800 border-indigo-200', code: '#e0e7ff' },
-    { name: 'Violet', class: 'bg-violet-100 text-violet-800 border-violet-200', code: '#ede9fe' },
-    { name: 'Purple', class: 'bg-purple-100 text-purple-800 border-purple-200', code: '#f3e8ff' },
-    { name: 'Fuchsia', class: 'bg-fuchsia-100 text-fuchsia-800 border-fuchsia-200', code: '#fae8ff' },
-    { name: 'Pink', class: 'bg-pink-100 text-pink-800 border-pink-200', code: '#fce7f3' },
-    { name: 'Rose', class: 'bg-rose-100 text-rose-800 border-rose-200', code: '#ffe4e6' },
-    { name: 'Slate', class: 'bg-slate-100 text-slate-800 border-slate-200', code: '#f1f5f9' },
-    { name: 'White', class: 'bg-white text-gray-800 border-gray-200', code: '#ffffff' },
-];
+const SUBJECTS_BY_GRADE: Record<string, string[]> = {
+    '1': ['국어', '수학', '바생', '슬생', '즐생', '창체', '안전'],
+    '2': ['국어', '수학', '바생', '슬생', '즐생', '창체', '안전'],
+    '3': ['국어', '수학', '사회', '과학', '영어', '도덕', '음악', '미술', '체육', '창체'],
+    '4': ['국어', '수학', '사회', '과학', '영어', '도덕', '음악', '미술', '체육', '창체'],
+    '5': ['국어', '수학', '사회', '과학', '영어', '도덕', '음악', '미술', '체육', '실과', '창체'],
+    '6': ['국어', '수학', '사회', '과학', '영어', '도덕', '음악', '미술', '체육', '실과', '창체'],
+};
+
+const normalizeGrade = (grade?: string) => grade?.match(/[1-6]/)?.[0] || '';
+
+const getDefaultSubjectsForGrade = (grade?: string) => {
+    const subjectNames = SUBJECTS_BY_GRADE[normalizeGrade(grade)];
+    return subjectNames
+        ? ALL_DEFAULT_SUBJECTS.filter(subject => subjectNames.includes(subject.name))
+        : ALL_DEFAULT_SUBJECTS;
+};
+
+const getInitialSubjects = (initialSchedule: BasicSchedule, grade?: string) => {
+    const storedSubjects = initialSchedule.subjectSettings;
+    if (!storedSubjects?.length) return getDefaultSubjectsForGrade(grade);
+
+    const gradeSubjects = new Set(SUBJECTS_BY_GRADE[normalizeGrade(grade)] || ALL_DEFAULT_SUBJECTS.map(subject => subject.name));
+    const systemSubjects = new Set(ALL_DEFAULT_SUBJECTS.map(subject => subject.name));
+    const scheduledSubjects = new Set<string>();
+    SCHOOL_DAYS.forEach(day => {
+        initialSchedule[String(day)]?.periods?.forEach((period: PeriodPlan) => {
+            if (period.subject) scheduledSubjects.add(period.subject);
+        });
+    });
+
+    return storedSubjects.filter(subject =>
+        !systemSubjects.has(subject.name) || gradeSubjects.has(subject.name) || scheduledSubjects.has(subject.name)
+    );
+};
+
+const SUBJECT_COLOR_HEX: Record<string, string> = {
+    red: '#EF4444', orange: '#F97316', amber: '#F59E0B', yellow: '#EAB308', lime: '#84CC16',
+    green: '#22C55E', emerald: '#10B981', teal: '#14B8A6', cyan: '#06B6D4', sky: '#0EA5E9',
+    blue: '#3B82F6', indigo: '#6366F1', violet: '#8B5CF6', purple: '#A855F7', fuchsia: '#D946EF',
+    pink: '#EC4899', rose: '#F43F5E', slate: '#64748B', gray: '#6B7280', white: '#FFFFFF',
+};
+
+const getSubjectHex = (subject?: SubjectSetting) => {
+    if (subject?.customColor && /^#[0-9a-f]{6}$/i.test(subject.customColor)) return subject.customColor;
+    const colorName = subject?.color.match(/bg-([a-z]+)(?:-|$)/)?.[1] || 'slate';
+    return SUBJECT_COLOR_HEX[colorName] || SUBJECT_COLOR_HEX.slate;
+};
+
+const getSubjectStyle = (subject?: SubjectSetting): React.CSSProperties | undefined => {
+    if (!subject?.customColor) return undefined;
+    const hex = getSubjectHex(subject);
+    const red = parseInt(hex.slice(1, 3), 16);
+    const green = parseInt(hex.slice(3, 5), 16);
+    const blue = parseInt(hex.slice(5, 7), 16);
+    return {
+        backgroundColor: `rgba(${red}, ${green}, ${blue}, 0.18)`,
+        color: `rgb(${Math.round(red * 0.42)}, ${Math.round(green * 0.42)}, ${Math.round(blue * 0.42)})`,
+    };
+};
 
 const getTodayString = () => new Date().toLocaleDateString('en-CA');
 
-const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSchedule: BasicSchedule, onSave: (s: BasicSchedule) => Promise<void>, onClose: () => void }) => {
+const BasicScheduleModal = ({ initialSchedule, grade, onSave, onClose }: { initialSchedule: BasicSchedule, grade?: string, onSave: (s: BasicSchedule) => Promise<void>, onClose: () => void }) => {
     const [schedule, setSchedule] = useState<BasicSchedule>(JSON.parse(JSON.stringify(initialSchedule)));
-    const [subjects, setSubjects] = useState<SubjectSetting[]>(initialSchedule.subjectSettings || DEFAULT_SUBJECTS);
+    const [subjects, setSubjects] = useState<SubjectSetting[]>(() => getInitialSubjects(initialSchedule, grade));
     const [draggedSubject, setDraggedSubject] = useState<string | null>(null);
 
     // New Subject State
     const [newSubjectName, setNewSubjectName] = useState('');
-    const [isColorPickerOpen, setIsColorPickerOpen] = useState<string | null>(null);
 
     // Calculate Statistics
     const statistics = useMemo(() => {
@@ -94,21 +130,13 @@ const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSched
         };
     }, [schedule]);
 
-    // Click outside to close color picker
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (!(e.target as HTMLElement).closest('.color-picker-container')) {
-                setIsColorPickerOpen(null);
-            }
-        };
-        document.addEventListener('click', handleClickOutside);
-        return () => document.removeEventListener('click', handleClickOutside);
-    }, []);
-
     const getSubjectColor = (subjectName: string) => {
         const found = subjects.find(s => s.name === subjectName);
         return found ? found.color : 'bg-white border-base-300 text-base-content';
     };
+
+    const getCurrentSubjectStyle = (subjectName: string) =>
+        getSubjectStyle(subjects.find(subject => subject.name === subjectName));
 
     const handleDragStart = (subjectName: string) => {
         setDraggedSubject(subjectName);
@@ -229,9 +257,11 @@ const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSched
         }
     };
 
-    const handleColorChange = (subjectName: string, colorClass: string) => {
-        setSubjects(prev => prev.map(s => s.name === subjectName ? { ...s, color: colorClass } : s));
-        setIsColorPickerOpen(null);
+    const handleColorChange = (subjectName: string, color: string) => {
+        setSubjects(prev => prev.map(subject => subject.name === subjectName
+            ? { ...subject, customColor: color.toUpperCase() }
+            : subject
+        ));
     };
 
     const handleSave = () => {
@@ -249,18 +279,19 @@ const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSched
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
             <div
-                className="bg-base-100 rounded-xl shadow-2xl w-full max-w-[1400px] h-[95vh] flex flex-col border border-base-300"
+                className="flex max-h-[92vh] w-full max-w-[1180px] flex-col overflow-hidden rounded-2xl border border-base-300 bg-base-100 shadow-2xl"
                 onClick={e => e.stopPropagation()}
                 onKeyDown={handleKeyDown}
             >
-                <div className="p-4 border-b border-base-200 bg-base-50 flex justify-between items-center rounded-t-xl shrink-0">
-                    <h3 className="text-xl font-bold text-base-content flex items-center gap-2">
-                        기초 시간표 설정
-                    </h3>
-                    <div className="text-sm text-base-content-secondary">
-                        왼쪽 과목을 드래그하여 시간표에 놓고, 클릭하여 전담/원어민/스강 여부를 설정하세요.
+                <div className="flex shrink-0 items-center justify-between gap-4 border-b border-base-200 bg-white px-5 py-3">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-extrabold text-base-content">기초 시간표 설정</h3>
+                            {normalizeGrade(grade) && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">{normalizeGrade(grade)}학년 교과</span>}
+                        </div>
+                        <p className="mt-0.5 truncate text-xs text-base-content-secondary">과목을 시간표로 끌어 놓고, 배치된 과목을 눌러 수업 유형을 바꿀 수 있습니다.</p>
                     </div>
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
                         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -269,40 +300,30 @@ const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSched
 
                 <div className="flex-1 flex overflow-hidden">
                     {/* Left: Subjects Palette */}
-                    <div className="w-56 bg-base-50 border-r-4 border-base-200 p-4 overflow-y-auto custom-scrollbar shrink-0 flex flex-col gap-4 shadow-inner">
-                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pb-2">
+                    <div className="flex w-52 shrink-0 flex-col gap-3 overflow-y-auto border-r border-base-200 bg-base-50 p-3 custom-scrollbar">
+                        <div className="flex-1 space-y-1.5 overflow-y-auto pb-2 custom-scrollbar">
                             <h4 className="font-bold text-base-content mb-2 text-sm flex items-center gap-1">
                                 과목 목록 및 색상
                             </h4>
                             {subjects.map((subj) => (
                                 <div key={subj.name} className="flex items-center gap-2 group relative">
-                                    <div className="color-picker-container relative">
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); setIsColorPickerOpen(isColorPickerOpen === subj.name ? null : subj.name); }}
-                                            className={`w-6 h-6 rounded-full border-2 border-white shadow-sm cursor-pointer hover:scale-110 transition-transform ${subj.color.split(' ')[0]}`}
-                                            title="색상 변경"
-                                        ></button>
-
-                                        {isColorPickerOpen === subj.name && (
-                                            <div className="absolute top-8 left-0 z-50 bg-white p-2 rounded-xl shadow-xl border border-gray-200 grid grid-cols-5 gap-1 w-48 animate-[fadeIn_0.1s_ease-out]">
-                                                {COLOR_PALETTE.map((pal) => (
-                                                    <button
-                                                        key={pal.name}
-                                                        className={`w-6 h-6 rounded-full border border-gray-100 hover:scale-125 transition-transform ${pal.class.split(' ')[0]}`}
-                                                        style={{ backgroundColor: pal.code }}
-                                                        onClick={() => handleColorChange(subj.name, pal.class)}
-                                                        title={pal.name}
-                                                    />
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
+                                    <label className="relative h-7 w-7 shrink-0 cursor-pointer overflow-hidden rounded-full border-2 border-white shadow-sm ring-1 ring-base-300 transition-transform hover:scale-110" title={`${subj.name} 색상 변경`}>
+                                        <span className="pointer-events-none absolute inset-0" style={{ backgroundColor: getSubjectHex(subj) }} />
+                                        <input
+                                            type="color"
+                                            value={getSubjectHex(subj)}
+                                            onChange={(event) => handleColorChange(subj.name, event.target.value)}
+                                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                                            aria-label={`${subj.name} 색상 선택`}
+                                        />
+                                    </label>
 
                                     <div
                                         draggable
                                         onDragStart={() => handleDragStart(subj.name)}
+                                        style={getSubjectStyle(subj)}
                                         className={`
-                                            flex-1 p-2.5 rounded-lg border font-bold text-center cursor-grab active:cursor-grabbing shadow-sm hover:shadow-md transition-all text-sm
+                                             flex-1 px-2 py-1.5 rounded-md border font-bold text-center cursor-grab active:cursor-grabbing shadow-sm hover:shadow-md transition-all text-xs
                                             ${subj.color}
                                         `}
                                     >
@@ -329,7 +350,12 @@ const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSched
                                     type="text"
                                     value={newSubjectName}
                                     onChange={(e) => setNewSubjectName(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === 'Enter') handleAddSubject(); }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.stopPropagation();
+                                            handleAddSubject();
+                                        }
+                                    }}
                                     className="flex-1 p-2 border border-base-300 rounded-md text-sm focus:ring-2 focus:ring-primary focus:border-primary"
                                     placeholder="과목명"
                                 />
@@ -346,13 +372,13 @@ const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSched
                     </div>
 
                     {/* Center: Timetable Grid */}
-                    <div className="flex-1 overflow-auto custom-scrollbar p-6 bg-slate-50 relative flex flex-col">
-                        <div className="min-w-[600px] flex flex-col h-full bg-white shadow-sm border border-slate-300">
+                    <div className="relative flex-1 overflow-auto bg-slate-50 p-4 custom-scrollbar">
+                        <div className="flex h-[540px] min-w-[580px] flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
                             {/* Header */}
                             <div className="grid grid-cols-6 border-b-2 border-slate-300 bg-slate-100">
-                                <div className="text-center font-bold text-gray-500 py-3 border-r border-slate-300">교시</div>
+                                <div className="border-r border-slate-300 py-2 text-center text-sm font-bold text-gray-500">교시</div>
                                 {SCHOOL_DAYS.map((dayIdx, idx) => (
-                                    <div key={dayIdx} className={`text-center font-bold text-lg py-3 border-slate-300 text-gray-700 ${idx !== SCHOOL_DAYS.length - 1 ? 'border-r' : ''}`}>
+                                    <div key={dayIdx} className={`text-center font-bold text-sm py-2 border-slate-300 text-gray-700 ${idx !== SCHOOL_DAYS.length - 1 ? 'border-r' : ''}`}>
                                         {DAYS_OF_WEEK[dayIdx]}요일
                                     </div>
                                 ))}
@@ -368,16 +394,18 @@ const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSched
 
                                         {SCHOOL_DAYS.map((dayIdx, dIdx) => {
                                             const dayStr = String(dayIdx);
-                                            const plan = getPeriodData(dayStr, period);
-                                            const hasSubject = plan && plan.subject;
-                                            const colorClass = hasSubject ? getSubjectColor(plan.subject) : 'bg-white';
+                                             const plan = getPeriodData(dayStr, period);
+                                             const hasSubject = plan && plan.subject;
+                                             const colorClass = hasSubject ? getSubjectColor(plan.subject) : 'bg-white';
+                                             const colorStyle = hasSubject ? getCurrentSubjectStyle(plan.subject) : undefined;
                                             const teacherMode = plan?.teacherMode || 'general';
 
                                             return (
                                                 <div
                                                     key={`${dayIdx}-${period}`}
                                                     onDrop={() => handleDrop(dayStr, period)}
-                                                    onDragOver={handleDragOver}
+                                                     onDragOver={handleDragOver}
+                                                     style={colorStyle}
                                                     className={`
                                                         relative flex flex-col items-center justify-center p-1 transition-all group
                                                         ${colorClass}
@@ -390,7 +418,7 @@ const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSched
                                                 >
                                                     {hasSubject ? (
                                                         <>
-                                                            <span className="font-extrabold text-lg drop-shadow-sm select-none">{plan.subject}</span>
+                                                            <span className="select-none text-sm font-extrabold drop-shadow-sm">{plan.subject}</span>
 
                                                             {/* Controls Overlay (Delete) */}
                                                             <div className="absolute top-1 right-1 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -433,10 +461,10 @@ const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSched
                     </div>
 
                     {/* Right: Statistics Panel */}
-                    <div className="w-64 bg-base-50 border-l-4 border-base-200 p-4 overflow-y-auto custom-scrollbar shrink-0 shadow-inner flex flex-col gap-6">
+                    <div className="flex w-52 shrink-0 flex-col gap-4 overflow-y-auto border-l border-base-200 bg-base-50 p-3 custom-scrollbar">
                         {/* Summary */}
-                        <div className="bg-white p-4 rounded-xl border border-base-200 shadow-sm">
-                            <h4 className="font-bold text-base-content mb-3 border-b pb-2">주당 수업 시수 요약</h4>
+                        <div className="rounded-xl border border-base-200 bg-white p-3 shadow-sm">
+                            <h4 className="mb-2 border-b pb-2 text-sm font-bold text-base-content">주당 수업 시수</h4>
                             <div className="space-y-2 text-sm">
                                 <div className="flex justify-between items-center">
                                     <span className="text-gray-600">총 수업 시수</span>
@@ -473,8 +501,8 @@ const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSched
                                             .sort(([, a], [, b]) => (b as number) - (a as number))
                                             .map(([subject, count]) => (
                                                 <tr key={subject} className="hover:bg-base-50">
-                                                    <td className="py-2 px-3 font-medium text-gray-700">{subject}</td>
-                                                    <td className="py-2 px-3 text-right font-bold text-gray-900">{count}</td>
+                                                    <td className="px-3 py-1.5 font-medium text-gray-700">{subject}</td>
+                                                    <td className="px-3 py-1.5 text-right font-bold text-gray-900">{count}</td>
                                                 </tr>
                                             ))}
                                         {Object.keys(statistics.subjectCounts).length === 0 && (
@@ -489,7 +517,7 @@ const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSched
                     </div>
                 </div>
 
-                <div className="p-4 border-t border-base-200 bg-base-50 rounded-b-xl flex justify-between items-center shrink-0">
+                <div className="flex shrink-0 items-center justify-between border-t border-base-200 bg-white px-5 py-3">
                     <p className="text-xs text-base-content-secondary">
                         * 시간표의 과목을 클릭하여 <strong>전담, 원어민(영어), 스강(체육)</strong> 모드를 변경할 수 있습니다.
                     </p>
@@ -510,7 +538,7 @@ const BasicScheduleModal = ({ initialSchedule, onSave, onClose }: { initialSched
     );
 };
 
-const ClassPlanner = (): React.ReactElement => {
+const ClassPlanner = ({ grade }: { grade?: string }): React.ReactElement => {
     const { showAlert } = useModal();
     const [selectedDate, setSelectedDate] = useState(getTodayString());
     const [loading, setLoading] = useState(false);
@@ -521,12 +549,15 @@ const ClassPlanner = (): React.ReactElement => {
     const [basicSchedule, setBasicSchedule] = useState<BasicSchedule>({});
     const [isBasicScheduleModalOpen, setIsBasicScheduleModalOpen] = useState(false);
 
-    const currentSubjects = basicSchedule.subjectSettings || DEFAULT_SUBJECTS;
+    const currentSubjects = useMemo(() => getInitialSubjects(basicSchedule, grade), [basicSchedule, grade]);
 
     const getSubjectColor = (subjectName: string) => {
         const found = currentSubjects.find(s => s.name === subjectName);
         return found ? found.color : 'bg-white border-base-300 text-base-content';
     };
+
+    const getCurrentSubjectStyle = (subjectName: string) =>
+        getSubjectStyle(currentSubjects.find(subject => subject.name === subjectName));
 
     const [isMobileCalendarOpen, setIsMobileCalendarOpen] = useState(true);
 
@@ -832,6 +863,7 @@ const ClassPlanner = (): React.ReactElement => {
                                             <select
                                                 value={plan.subject}
                                                 onChange={(e) => updatePlan(index, 'subject', e.target.value)}
+                                                style={plan.subject ? getCurrentSubjectStyle(plan.subject) : undefined}
                                                 className={`w-full p-2 pr-8 appearance-none border rounded-lg focus:ring-2 focus:ring-primary focus:border-primary transition-all text-xs font-bold text-center shadow-sm cursor-pointer
                                         ${plan.subject ? subjectColorClass : 'bg-white border-base-300 text-base-content'}
                                     `}
@@ -1025,6 +1057,7 @@ const ClassPlanner = (): React.ReactElement => {
             {isBasicScheduleModalOpen && (
                 <BasicScheduleModal
                     initialSchedule={basicSchedule}
+                    grade={grade}
                     onSave={handleSaveBasicSchedule}
                     onClose={() => setIsBasicScheduleModalOpen(false)}
                 />

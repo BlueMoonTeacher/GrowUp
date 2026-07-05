@@ -34,19 +34,37 @@ const DEFAULT_SETTINGS: ScheduleSettings = {
 
 // Available color palettes for custom categories
 const COLOR_PALETTE = [
-    { name: 'Blue', class: 'bg-blue-100 text-blue-800 border-blue-200' },
-    { name: 'Green', class: 'bg-green-100 text-green-800 border-green-200' },
-    { name: 'Red', class: 'bg-red-100 text-red-800 border-red-200' },
-    { name: 'Orange', class: 'bg-orange-100 text-orange-800 border-orange-200' },
-    { name: 'Yellow', class: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
-    { name: 'Purple', class: 'bg-purple-100 text-purple-800 border-purple-200' },
-    { name: 'Pink', class: 'bg-pink-100 text-pink-800 border-pink-200' },
-    { name: 'Indigo', class: 'bg-indigo-100 text-indigo-800 border-indigo-200' },
-    { name: 'Teal', class: 'bg-teal-100 text-teal-800 border-teal-200' },
-    { name: 'Cyan', class: 'bg-cyan-100 text-cyan-800 border-cyan-200' },
-    { name: 'Lime', class: 'bg-lime-100 text-lime-800 border-lime-200' },
-    { name: 'Slate', class: 'bg-slate-100 text-slate-800 border-slate-200' },
+    { name: 'Blue', class: 'bg-blue-100 text-blue-800 border-blue-200', hex: '#3B82F6' },
+    { name: 'Green', class: 'bg-green-100 text-green-800 border-green-200', hex: '#22C55E' },
+    { name: 'Red', class: 'bg-red-100 text-red-800 border-red-200', hex: '#EF4444' },
+    { name: 'Orange', class: 'bg-orange-100 text-orange-800 border-orange-200', hex: '#F97316' },
+    { name: 'Yellow', class: 'bg-yellow-100 text-yellow-800 border-yellow-200', hex: '#EAB308' },
+    { name: 'Purple', class: 'bg-purple-100 text-purple-800 border-purple-200', hex: '#A855F7' },
+    { name: 'Pink', class: 'bg-pink-100 text-pink-800 border-pink-200', hex: '#EC4899' },
+    { name: 'Indigo', class: 'bg-indigo-100 text-indigo-800 border-indigo-200', hex: '#6366F1' },
+    { name: 'Teal', class: 'bg-teal-100 text-teal-800 border-teal-200', hex: '#14B8A6' },
+    { name: 'Cyan', class: 'bg-cyan-100 text-cyan-800 border-cyan-200', hex: '#06B6D4' },
+    { name: 'Lime', class: 'bg-lime-100 text-lime-800 border-lime-200', hex: '#84CC16' },
+    { name: 'Slate', class: 'bg-slate-100 text-slate-800 border-slate-200', hex: '#64748B' },
 ];
+
+const getCategoryHex = (category?: ScheduleCategoryDef) => {
+    if (category?.color && /^#[0-9a-f]{6}$/i.test(category.color)) return category.color;
+    return COLOR_PALETTE.find(color => color.class === category?.colorClass)?.hex || '#64748B';
+};
+
+const getScheduleCategoryStyle = (category?: ScheduleCategoryDef): React.CSSProperties => {
+    const hex = getCategoryHex(category);
+    const red = parseInt(hex.slice(1, 3), 16);
+    const green = parseInt(hex.slice(3, 5), 16);
+    const blue = parseInt(hex.slice(5, 7), 16);
+
+    return {
+        backgroundColor: `rgba(${red}, ${green}, ${blue}, 0.16)`,
+        borderColor: `rgba(${red}, ${green}, ${blue}, 0.48)`,
+        color: `rgb(${Math.round(red * 0.42)}, ${Math.round(green * 0.42)}, ${Math.round(blue * 0.42)})`,
+    };
+};
 
 const getTodayString = () => new Date().toLocaleDateString('en-CA');
 
@@ -342,7 +360,7 @@ const SettingsModal = ({ currentSettings, onSave, onClose }: { currentSettings: 
 
     const handleColorChange = (index: number, val: string) => {
         const newCats = [...settings.categories];
-        newCats[index].colorClass = val;
+        newCats[index] = { ...newCats[index], color: val.toUpperCase() };
         setSettings({ ...settings, categories: newCats });
     };
 
@@ -356,7 +374,8 @@ const SettingsModal = ({ currentSettings, onSave, onClose }: { currentSettings: 
         const newCat: ScheduleCategoryDef = {
             id: newId,
             label: '새 분류',
-            colorClass: COLOR_PALETTE[0].class
+            colorClass: COLOR_PALETTE[0].class,
+            color: COLOR_PALETTE[0].hex,
         };
         setSettings({ ...settings, categories: [...settings.categories, newCat] });
     };
@@ -396,17 +415,18 @@ const SettingsModal = ({ currentSettings, onSave, onClose }: { currentSettings: 
                                         className="flex-1 p-2 border border-base-300 rounded text-sm bg-white text-gray-900 focus:ring-primary focus:border-primary"
                                         placeholder="분류명"
                                     />
-                                    <select
-                                        value={cat.colorClass}
-                                        onChange={(e) => handleColorChange(index, e.target.value)}
-                                        className={`w-32 p-2 border border-base-300 rounded text-sm cursor-pointer ${cat.colorClass}`}
+                                    <label
+                                        className="flex h-[38px] w-12 cursor-pointer items-center justify-center rounded border border-base-300 bg-white p-1 shadow-sm hover:border-primary"
+                                        title="클릭하여 원하는 색상 선택"
                                     >
-                                        {COLOR_PALETTE.map(c => (
-                                            <option key={c.name} value={c.class} className="bg-white text-gray-800">
-                                                {c.name}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        <input
+                                            type="color"
+                                            value={getCategoryHex(cat)}
+                                            onChange={(e) => handleColorChange(index, e.target.value)}
+                                            className="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0"
+                                            aria-label={`${cat.label} 색상 선택`}
+                                        />
+                                    </label>
                                     <button
                                         onClick={() => handleDeleteCategory(index)}
                                         className="p-2 text-gray-400 hover:text-red-500 rounded hover:bg-red-50"
@@ -640,6 +660,7 @@ const RecurringEventModal = ({ categories, onSave, onClose }: RecurringEventModa
                                     <button
                                         key={cat.id}
                                         onClick={() => setCategory(cat.label)}
+                                        style={category === cat.label ? getScheduleCategoryStyle(cat) : undefined}
                                         className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-all
                                             ${category === cat.label
                                                 ? `${cat.colorClass} ring-2 ring-offset-1 ring-current shadow-sm`
@@ -1277,6 +1298,11 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
         return cat?.colorClass || 'bg-gray-100 text-gray-800 border-gray-200';
     };
 
+    const getCategoryStyle = (catLabel: string) => {
+        const category = settings.categories.find(cat => cat.label === catLabel);
+        return getScheduleCategoryStyle(category);
+    };
+
     /** 모바일 전용: 오늘 날짜 일정 목록(캘린더 셀 밖에서 읽기 쉽게) */
     const todayScheduleEvents = useMemo(() => {
         const todayStr = getTodayString();
@@ -1577,6 +1603,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                             key={event.id}
                                             type="button"
                                             onClick={() => openEventModal(getTodayString(), event)}
+                                            style={getCategoryStyle(event.category)}
                                             className={`max-w-full rounded-lg border px-2.5 py-1.5 text-left text-xs shadow-sm transition-opacity hover:opacity-90 ${getCategoryColor(event.category)} ${event.isCompleted ? 'opacity-60 line-through' : ''}`}
                                             title={event.title}
                                         >
@@ -1648,6 +1675,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                         <div
                                             key={event.id}
                                             onClick={(e) => { e.stopPropagation(); openEventModal(dateStr, event); }}
+                                            style={getCategoryStyle(event.category)}
                                             className={`px-2 py-0.5 rounded text-[10px] border flex flex-col gap-0.5 shadow-sm transition-all hover:scale-[1.02] hover:shadow-md
                                                 ${getCategoryColor(event.category)}
                                                 ${event.isCompleted ? 'opacity-50 grayscale decoration-slate-400' : ''}
@@ -1705,6 +1733,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                     <button
                                         type="button"
                                         onClick={() => openEventModal(getTodayString(), event)}
+                                        style={getCategoryStyle(event.category)}
                                         className={`w-full rounded-lg border px-3 py-2 text-left text-sm shadow-sm transition-opacity hover:opacity-95 ${getCategoryColor(event.category)} ${event.isCompleted ? 'opacity-60 line-through' : ''}`}
                                     >
                                         <div className="flex items-start gap-2">
@@ -1946,6 +1975,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                             <button
                                                 key={cat.id}
                                                 onClick={() => setFormData({ ...formData, category: cat.label })}
+                                                style={formData.category === cat.label ? getScheduleCategoryStyle(cat) : undefined}
                                                 className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-all
                                                     ${formData.category === cat.label
                                                         ? `${cat.colorClass} ring-2 ring-offset-1 ring-current shadow-sm`

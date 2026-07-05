@@ -8,6 +8,13 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        proxy: {
+          '/api-proxy': {
+            target: 'https://generativelanguage.googleapis.com',
+            changeOrigin: true,
+            rewrite: (requestPath) => requestPath.replace(/^\/api-proxy/, ''),
+          },
+        },
       },
       plugins: [react()],
       define: {

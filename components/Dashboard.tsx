@@ -439,7 +439,7 @@ const Dashboard = ({ students, selectedStudent, onSelectStudent, onEditStudent, 
                     {/* Planner View */}
                     {activeTab === 'planner' && (
                         <div className="h-full">
-                            <ClassPlanner />
+                            <ClassPlanner grade={settings.grade} />
                         </div>
                     )}
 

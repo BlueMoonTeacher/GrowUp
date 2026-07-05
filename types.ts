@@ -91,6 +91,7 @@ export interface ClassPlan {
 export interface SubjectSetting {
     name: string;
     color: string;
+    customColor?: string;
 }
 
 export interface BasicSchedule {
@@ -107,6 +108,7 @@ export interface ScheduleCategoryDef {
     id: string;
     label: string;
     colorClass: string; // Tailwind class string (e.g., 'bg-blue-100 text-blue-800 border-blue-200')
+    color?: string; // User-selected HEX color. colorClass remains for legacy settings.
 }
 
 export interface ScheduleViewOptions {

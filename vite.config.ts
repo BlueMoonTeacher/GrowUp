@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
           '/api-proxy': {
             target: 'https://generativelanguage.googleapis.com',
             changeOrigin: true,
+            headers: env.GEMINI_API_KEY ? { 'x-goog-api-key': env.GEMINI_API_KEY } : undefined,
             rewrite: (requestPath) => requestPath.replace(/^\/api-proxy/, ''),
           },
         },

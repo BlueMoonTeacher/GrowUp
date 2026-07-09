@@ -15,8 +15,10 @@ FROM nginx:alpine
 # Copy built assets to Nginx html folder
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Custom nginx config to support React Router SPA fallback and port 8080
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Custom nginx config to support React Router SPA fallback and port 8080.
+# The official nginx image renders templates with environment variables on start,
+# so Cloud Run's GEMINI_API_KEY can be injected into the API proxy at runtime.
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 
 EXPOSE 8080
 

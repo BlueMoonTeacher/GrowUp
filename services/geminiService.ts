@@ -18,10 +18,12 @@ export interface ExtractedScheduleDraft {
 
 // Helper to initialize AI client with dynamic key
 function getAiClient(apiKey?: string) {
-    if (!apiKey || apiKey.trim() === '') {
+    const resolvedApiKey = apiKey?.trim() || process.env.GEMINI_API_KEY || 'proxy-managed';
+
+    if (!resolvedApiKey || resolvedApiKey.trim() === '') {
         throw new Error("Gemini API 키가 설정되지 않았습니다. 로그인 후 우측 상단의 '설정' 메뉴에서 직접 발급받은 API 키를 입력해주세요.");
     }
-    return new GoogleGenAI({ apiKey });
+    return new GoogleGenAI({ apiKey: resolvedApiKey });
 }
 
 // Helper to convert a File object to a GoogleGenAI.Part object.

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Student, AnalysisResult, MonthlyTrend, BehaviorAnalysisMode } from '../types';
-import { analyzeBehaviorRecords } from '../services/geminiService';
+import { analyzeBehaviorRecords, softenBehaviorReport } from '../services/geminiService';
 import { useModal } from '../context/ModalContext';
 import { AppSettings } from '../App';
 
@@ -214,6 +214,41 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
   // State for editable report
   const [editableReport, setEditableReport] = useState('');
   const [isSavingReport, setIsSavingReport] = useState(false);
+  const [isSofteningReport, setIsSofteningReport] = useState(false);
+  const [reportHistory, setReportHistory] = useState<string[]>([]);
+  const [reportHistoryIndex, setReportHistoryIndex] = useState(-1);
+
+  const canUndoReport = reportHistoryIndex > 0;
+  const canRedoReport = reportHistoryIndex >= 0 && reportHistoryIndex < reportHistory.length - 1;
+
+  const resetReportHistory = (report: string) => {
+      setEditableReport(report);
+      setReportHistory(report ? [report] : []);
+      setReportHistoryIndex(report ? 0 : -1);
+  };
+
+  const commitReportHistory = (report: string) => {
+      setEditableReport(report);
+      const current = reportHistoryIndex >= 0 ? reportHistory[reportHistoryIndex] : '';
+      if (current === report) return;
+      const nextHistory = [...reportHistory.slice(0, reportHistoryIndex + 1), report].slice(-30);
+      setReportHistory(nextHistory);
+      setReportHistoryIndex(nextHistory.length - 1);
+  };
+
+  const handleUndoReport = () => {
+      if (!canUndoReport) return;
+      const nextIndex = reportHistoryIndex - 1;
+      setReportHistoryIndex(nextIndex);
+      setEditableReport(reportHistory[nextIndex] || '');
+  };
+
+  const handleRedoReport = () => {
+      if (!canRedoReport) return;
+      const nextIndex = reportHistoryIndex + 1;
+      setReportHistoryIndex(nextIndex);
+      setEditableReport(reportHistory[nextIndex] || '');
+  };
 
   // Handle ESC key to close
   useEffect(() => {
@@ -236,7 +271,9 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
   // Sync editable report when result changes
   useEffect(() => {
     if (result) {
-        setEditableReport(result.report);
+        resetReportHistory(result.report);
+    } else {
+        resetReportHistory('');
     }
   }, [result]);
 
@@ -301,7 +338,7 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
     const stored = student.behaviorAnalysisResults?.[mode]
       || (student.analysisResult?.mode === mode ? student.analysisResult : null);
     setResult(stored || null);
-    setEditableReport(stored?.report || '');
+    resetReportHistory(stored?.report || '');
   };
 
   const handleSaveReport = async () => {
@@ -317,6 +354,28 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
           await showAlert("저장 중 오류가 발생했습니다.");
       } finally {
           setIsSavingReport(false);
+      }
+  };
+
+  const handleSoftenReport = async () => {
+      if (!result || !editableReport.trim()) return;
+      setIsSofteningReport(true);
+      try {
+          const softenedReport = await softenBehaviorReport(
+              student.name.hangul,
+              student.behaviorRecords || [],
+              editableReport,
+              result.mode || analysisMode,
+              settings?.geminiApiKey,
+              settings?.geminiModel
+          );
+          commitReportHistory(softenedReport);
+          await showAlert("초안을 순화했습니다. 내용을 검토한 뒤 저장해 주세요.");
+      } catch (e) {
+          console.error(e);
+          await showAlert("초안 순화 중 오류가 발생했습니다.");
+      } finally {
+          setIsSofteningReport(false);
       }
   };
 
@@ -452,10 +511,50 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
                                     </svg>
                                     {result.mode === 'yearEnd' ? '학년말' : '1학기'} 기록 초안
                                 </h3>
-                                <div className="flex gap-1.5">
+                                <div className="flex flex-wrap justify-end gap-1.5">
+                                    <button
+                                        onClick={handleUndoReport}
+                                        disabled={!canUndoReport || isSavingReport || isSofteningReport}
+                                        title="이전 초안으로 되돌리기"
+                                        aria-label="이전 초안으로 되돌리기"
+                                        className="h-8 w-8 shrink-0 rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 flex items-center justify-center"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fillRule="evenodd" d="M7.707 3.293a1 1 0 010 1.414L5.414 7H11a6 6 0 016 6 1 1 0 11-2 0 4 4 0 00-4-4H5.414l2.293 2.293a1 1 0 11-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        onClick={handleRedoReport}
+                                        disabled={!canRedoReport || isSavingReport || isSofteningReport}
+                                        title="되돌린 초안 다시 앞으로가기"
+                                        aria-label="되돌린 초안 다시 앞으로가기"
+                                        className="h-8 w-8 shrink-0 rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition-all hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 flex items-center justify-center"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fillRule="evenodd" d="M12.293 3.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 11-1.414-1.414L14.586 9H9a4 4 0 00-4 4 1 1 0 11-2 0 6 6 0 016-6h5.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                                        </svg>
+                                    </button>
+                                    <button
+                                        onClick={handleSoftenReport}
+                                        disabled={isSofteningReport || isSavingReport || !editableReport.trim()}
+                                        title="현재 초안을 긍정적 변화 가능성 중심 문장으로 순화"
+                                        className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300 font-semibold flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {isSofteningReport ? (
+                                            <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                        ) : (
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                                <path d="M11.983 1.907a1 1 0 00-1.966 0l-.33 1.842a5 5 0 01-4.036 4.036l-1.842.33a1 1 0 000 1.966l1.842.33a5 5 0 014.036 4.036l.33 1.842a1 1 0 001.966 0l.33-1.842a5 5 0 014.036-4.036l1.842-.33a1 1 0 000-1.966l-1.842-.33a5 5 0 01-4.036-4.036l-.33-1.842z" />
+                                            </svg>
+                                        )}
+                                        순화
+                                    </button>
                                     <button 
                                         onClick={handleSaveReport}
-                                        disabled={isSavingReport || editableReport === result.report}
+                                        disabled={isSavingReport || isSofteningReport || editableReport === result.report}
                                         className={`text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all shadow-sm border ${
                                             editableReport !== result.report
                                             ? 'bg-primary text-primary-content border-primary hover:bg-primary-focus'
@@ -491,6 +590,7 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
                                 className="flex-1 p-5 bg-white resize-none focus:outline-none text-base text-slate-800 leading-loose font-medium custom-scrollbar"
                                 value={editableReport}
                                 onChange={(e) => setEditableReport(e.target.value)}
+                                onBlur={() => commitReportHistory(editableReport)}
                                 placeholder="분석된 내용이 여기에 표시됩니다. 직접 수정할 수 있습니다."
                             />
                             

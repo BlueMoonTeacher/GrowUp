@@ -172,6 +172,16 @@ const analysisSchema = {
     }
 };
 
+const softenedReportSchema = {
+    type: Type.OBJECT,
+    properties: {
+        report: {
+            type: Type.STRING,
+            description: "순화된 학교생활기록부 행동특성 및 종합의견 초안. 줄바꿈 없이 한 문단으로 작성."
+        }
+    }
+};
+
 // 스키마 정의: 평가 계획 추출
 const assessmentPlanSchema = {
     type: Type.ARRAY,
@@ -195,6 +205,31 @@ const assessmentPlanSchema = {
         }
     }
 };
+
+const getTargetBehaviorRecords = (records: BehaviorRecord[], mode: BehaviorAnalysisMode) => (
+    mode === 'semester1'
+        ? records.filter(record => {
+            const month = Number(record.date.slice(5, 7));
+            return month >= 3 && month <= 8;
+        })
+        : records
+);
+
+const formatBehaviorRecordsForPrompt = (records: BehaviorRecord[], mode: BehaviorAnalysisMode) => (
+    [...getTargetBehaviorRecords(records, mode)]
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map(r => {
+            const resolvedType = resolveObservationType(r);
+            const type = resolvedType === 'positive' ? '긍정 행동' : resolvedType === 'guidance' ? '지도 필요' : '일반 관찰';
+            return [
+                `[${r.date} ${r.period} / ${type}]`,
+                r.context ? `관찰 상황: ${r.context}` : '',
+                `구체적 행동: ${r.content}`,
+                r.followUp ? `지도 및 후속 변화: ${r.followUp}` : ''
+            ].filter(Boolean).join(' ');
+        })
+        .join("\n")
+);
 
 const scheduleDraftSchema = {
     type: Type.ARRAY,
@@ -265,26 +300,7 @@ export async function analyzeBehaviorRecords(
     const ai = getAiClient(apiKey);
     const selectedModel = normalizeGeminiModel(model);
 
-    // 기록 데이터를 텍스트로 변환
-    const targetRecords = mode === 'semester1'
-        ? records.filter(record => {
-            const month = Number(record.date.slice(5, 7));
-            return month >= 3 && month <= 8;
-        })
-        : records;
-    const recordsText = [...targetRecords]
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .map(r => {
-            const resolvedType = resolveObservationType(r);
-            const type = resolvedType === 'positive' ? '긍정 행동' : resolvedType === 'guidance' ? '지도 필요' : '일반 관찰';
-            return [
-                `[${r.date} ${r.period} / ${type}]`,
-                r.context ? `관찰 상황: ${r.context}` : '',
-                `구체적 행동: ${r.content}`,
-                r.followUp ? `지도 및 후속 변화: ${r.followUp}` : ''
-            ].filter(Boolean).join(' ');
-        })
-        .join("\n");
+    const recordsText = formatBehaviorRecordsForPrompt(records, mode);
 
     if (!recordsText) {
         throw new Error(mode === 'semester1' ? '1학기에 해당하는 행동 기록이 없습니다.' : '분석할 행동 기록이 없습니다.');
@@ -347,6 +363,78 @@ export async function analyzeBehaviorRecords(
         };
     } catch (error) {
         console.error("Error analyzing behavior records:", error);
+        throw error;
+    }
+}
+
+export async function softenBehaviorReport(
+    studentName: string,
+    records: BehaviorRecord[],
+    draftReport: string,
+    mode: BehaviorAnalysisMode = 'semester1',
+    apiKey?: string,
+    model?: string
+): Promise<string> {
+    if (!draftReport.trim()) {
+        throw new Error("순화할 초안이 없습니다.");
+    }
+
+    const recordsText = formatBehaviorRecordsForPrompt(records || [], mode);
+    if (!recordsText) {
+        throw new Error(mode === 'semester1' ? '1학기에 해당하는 행동 기록이 없습니다.' : '분석할 행동 기록이 없습니다.');
+    }
+
+    const ai = getAiClient(apiKey);
+    const selectedModel = normalizeGeminiModel(model);
+    const modeTitle = mode === 'semester1' ? '1학기 행동특성 및 종합의견 초안' : '학년말 행동특성 및 종합의견 초안';
+    const lengthGuide = mode === 'semester1' ? '4~6문장, 공백 포함 400~600자 내외' : '5~7문장, 공백 포함 500~700자 내외';
+
+    const prompt = `
+    당신은 대한민국 초등학교 생활기록부 작성 전문가입니다.
+    아래의 수시 관찰 기록과 기존 ${modeTitle}을 바탕으로, 교사가 검토할 수 있는 순화 초안으로 다시 작성하세요.
+
+    [학생 이름]: ${studentName}
+
+    [수시 관찰 기록]:
+    ${recordsText}
+
+    [기존 초안]:
+    ${draftReport}
+
+    [순화 목표]
+    - 부정적 낙인 표현을 줄이고, 관찰 가능한 사실과 지도 후 변화 가능성이 드러나도록 표현하십시오.
+    - 문제 행동 자체를 삭제하거나 숨기지 말고, 필요한 지도 영역을 "현재 보완이 필요한 점", "지도 속에서 형성해 가는 태도"처럼 교육적 문장으로 전환하십시오.
+    - 원 기록과 기존 초안에 없는 반성, 사과, 개선, 성장, 장점, 가정 배경, 심리 상태를 새로 만들지 마십시오.
+
+    [작성 원칙 - 필수 준수]
+    1. 학생 이름을 문장에 포함하지 마십시오.
+    2. ${lengthGuide}로 작성하십시오.
+    3. 모든 문장은 '~함.', '~임.', '~보임.', '~필요함.', '~기대됨.' 등의 학교생활기록부 문체로 끝맺으십시오.
+    4. 줄바꿈 없이 한 문단으로 작성하고, 온점 뒤에는 한 칸을 띄우십시오.
+    5. "문제아", "반항적", "게으름", "고집이 셈", "잘못", "변명", "책임감 없음"처럼 낙인 또는 단정으로 읽히는 표현을 피하십시오.
+    6. 관찰 사실은 완전히 긍정으로 왜곡하지 말고, "규칙 준수와 기본 생활 습관을 안정적으로 형성하기 위한 지속적인 지도가 필요함."처럼 변화 가능성과 지도 방향이 보이게 쓰십시오.
+    7. 공인어학시험, 교내외 대회·수상, 장학생, 자격증, 상호명·기관명과 사교육 유발 표현을 포함하지 마십시오.
+    8. 생성 과정이나 설명 없이 순화된 초안 본문만 report에 담으십시오.
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: selectedModel,
+            contents: { parts: [{ text: prompt }] },
+            config: {
+                responseMimeType: 'application/json',
+                responseSchema: softenedReportSchema,
+            },
+        });
+
+        const parsed = JSON.parse(response.text || "{}");
+        const report = typeof parsed.report === 'string' ? parsed.report.trim() : '';
+        if (!report) {
+            throw new Error("AI 응답이 비어있습니다.");
+        }
+        return report;
+    } catch (error) {
+        console.error("Error softening behavior report:", error);
         throw error;
     }
 }

@@ -560,12 +560,14 @@ const EvaluationEntry = ({
     students, 
     assessments, 
     evaluations, 
-    onSave 
+    onSave,
+    navigateToAssessmentId
 }: { 
     students: Student[], 
     assessments: Assessment[], 
     evaluations: Record<string, Record<string, EvaluationRecord>>, 
-    onSave: (aid: string, updates: { studentId: string, level: EvaluationLevel, exceptionReason?: EvaluationExceptionReason }[]) => Promise<void>
+    onSave: (aid: string, updates: { studentId: string, level: EvaluationLevel, exceptionReason?: EvaluationExceptionReason }[]) => Promise<void>,
+    navigateToAssessmentId?: string
 }) => {
     const { showAlert, showConfirm } = useModal();
     const [selectedSemester, setSelectedSemester] = useState(getCurrentSemester()); 
@@ -577,6 +579,16 @@ const EvaluationEntry = ({
     const [unsavedChanges, setUnsavedChanges] = useState<Record<string, EvaluationLevel>>({});
     const [unsavedReasons, setUnsavedReasons] = useState<Record<string, EvaluationExceptionReason | ''>>({});
     const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        if (!navigateToAssessmentId) return;
+        const target = assessments.find(a => a.id === navigateToAssessmentId);
+        if (!target) return;
+        setSelectedSemester(target.semester);
+        setSelectedSubject(target.subject);
+        setSelectedDomain(target.domain || '영역 없음');
+        setSelectedAssessId(target.id);
+    }, [navigateToAssessmentId, assessments]);
 
     // Reset local changes when assessment changes
     useEffect(() => {
@@ -1501,6 +1513,7 @@ const SubjectCommentManager = ({ students, assessments, evaluations, settings }:
 const EvaluationManager = ({ students, settings }: EvaluationManagerProps): React.ReactElement => {
   const { showAlert, showConfirm } = useModal();
   const [activeTab, setActiveTab] = useState<Tab>('entry');
+  const [entryTargetAssessmentId, setEntryTargetAssessmentId] = useState<string | undefined>(undefined);
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [evaluations, setEvaluations] = useState<Record<string, Record<string, EvaluationRecord>>>({});
   const [loading, setLoading] = useState(true);
@@ -1648,7 +1661,7 @@ const EvaluationManager = ({ students, settings }: EvaluationManagerProps): Reac
     <div className="h-full bg-base-100 rounded-xl shadow-lg border border-base-300/60 flex flex-col overflow-hidden min-h-0">
         <div className="p-1 sm:p-2 border-b border-base-300 flex justify-between items-center bg-base-50/50 shrink-0 overflow-x-auto">
              <div className="flex bg-white rounded-lg p-1 border border-base-300 shadow-sm shrink-0">
-                <button onClick={() => setActiveTab('entry')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'entry' ? 'bg-primary text-primary-content shadow-sm' : 'text-base-content-secondary hover:bg-base-50'}`}>평가 입력</button>
+                <button onClick={() => { setEntryTargetAssessmentId(undefined); setActiveTab('entry'); }} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'entry' ? 'bg-primary text-primary-content shadow-sm' : 'text-base-content-secondary hover:bg-base-50'}`}>평가 입력</button>
                 <button onClick={() => setActiveTab('missing')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'missing' ? 'bg-primary text-primary-content shadow-sm' : 'text-base-content-secondary hover:bg-base-50'}`}>미입력 현황</button>
                 <button onClick={() => setActiveTab('seteuk')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'seteuk' ? 'bg-primary text-primary-content shadow-sm' : 'text-base-content-secondary hover:bg-base-50'}`}>세특 관리</button>
                 <button onClick={() => setActiveTab('setup')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all whitespace-nowrap ${activeTab === 'setup' ? 'bg-primary text-primary-content shadow-sm' : 'text-base-content-secondary hover:bg-base-50'}`}>평가 계획 설정</button>
@@ -1682,6 +1695,7 @@ const EvaluationManager = ({ students, settings }: EvaluationManagerProps): Reac
                     assessments={assessments} 
                     evaluations={evaluations}
                     onSave={handleSaveEvaluations}
+                    navigateToAssessmentId={entryTargetAssessmentId}
                 />
             )}
             {activeTab === 'missing' && (
@@ -1689,7 +1703,10 @@ const EvaluationManager = ({ students, settings }: EvaluationManagerProps): Reac
                     students={students} 
                     assessments={assessments} 
                     evaluations={evaluations}
-                    onNavigateToEntry={(id) => setActiveTab('entry')}
+                    onNavigateToEntry={(id) => {
+                        setEntryTargetAssessmentId(id);
+                        setActiveTab('entry');
+                    }}
                 />
             )}
             {activeTab === 'seteuk' && (

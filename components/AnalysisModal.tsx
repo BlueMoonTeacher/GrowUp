@@ -58,13 +58,31 @@ const sortMonthsByAcademicYear = (a: string, b: string) => {
 
 const formatAnalysisTag = (tag: string): string => tag.replace(/^#+\s*/, '').trim();
 
+const isValidTrendMonth = (month: unknown): month is string => (
+    typeof month === 'string' && /^\d{4}-\d{2}$/.test(month)
+);
+
+const clampTrendScore = (value: unknown): number => {
+    const numericValue = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(numericValue)) return 0;
+    return Math.max(0, Math.min(numericValue, 10));
+};
+
 
 // SVG Graph Component
 const TrendChart = ({ data }: { data: MonthlyTrend[] }) => {
     if (!data || data.length === 0) return null;
 
     // Sort data by Academic Year (Start from March)
-    const sortedData = [...data].sort((a, b) => sortMonthsByAcademicYear(a.month, b.month));
+    const sortedData = [...data]
+        .filter(d => isValidTrendMonth(d.month))
+        .map(d => ({
+            ...d,
+            negativeIntensity: clampTrendScore(d.negativeIntensity),
+            positiveFrequency: clampTrendScore(d.positiveFrequency),
+        }))
+        .sort((a, b) => sortMonthsByAcademicYear(a.month, b.month));
+    if (sortedData.length === 0) return null;
     
     const width = 320;
     const height = 160;
@@ -96,7 +114,7 @@ const TrendChart = ({ data }: { data: MonthlyTrend[] }) => {
     // Calculate Points for Line
     const points = sortedData.map((d, i) => ({
         x: getX(i),
-        y: getY(Math.min(d.negativeIntensity, 10))
+        y: getY(d.negativeIntensity)
     }));
     
     let curvePath = '';
@@ -128,12 +146,12 @@ const TrendChart = ({ data }: { data: MonthlyTrend[] }) => {
 
                     {/* Positive Frequency Bars */}
                     {sortedData.map((d, i) => {
-                        const barHeight = Math.max(0, (height - paddingY) - getY(Math.min(d.positiveFrequency, 10)));
+                        const barHeight = Math.max(0, (height - paddingY) - getY(d.positiveFrequency));
                         return (
                             <rect 
                                 key={`bar-${i}`}
                                 x={getX(i) - barWidth / 2}
-                                y={getY(Math.min(d.positiveFrequency, 10))}
+                                y={getY(d.positiveFrequency)}
                                 width={barWidth}
                                 height={barHeight}
                                 fill="#a7f3d0" 
@@ -165,7 +183,7 @@ const TrendChart = ({ data }: { data: MonthlyTrend[] }) => {
                             className="absolute w-[7px] h-[7px] bg-white border-2 border-red-400 rounded-full z-10"
                             style={{
                                 left: `${getXPct(i)}%`,
-                                top: `${getYPct(Math.min(d.negativeIntensity, 10))}%`,
+                                top: `${getYPct(d.negativeIntensity)}%`,
                                 transform: 'translate(-50%, -50%)'
                             }}
                         />
@@ -178,7 +196,7 @@ const TrendChart = ({ data }: { data: MonthlyTrend[] }) => {
                             className="absolute text-[10px] font-bold text-red-500 text-center z-20"
                             style={{ 
                                 left: `${getXPct(i)}%`, 
-                                top: `${getYPct(Math.min(d.negativeIntensity, 10))}%`,
+                                top: `${getYPct(d.negativeIntensity)}%`,
                                 transform: 'translate(-50%, -180%)'
                             }}
                         >
@@ -309,16 +327,22 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, onUpdateStudent, sett
 
   // 2. 그래프 데이터 가공: 입력된 달이 아니면 점수를 0으로 강제 설정
   const chartData = useMemo(() => {
-      if (!result?.trends) return [];
+      if (!Array.isArray(result?.trends)) return [];
       
-      return result.trends.map(t => {
+      return result.trends.filter(t => isValidTrendMonth(t.month)).map(t => {
+          const normalizedTrend = {
+              ...t,
+              month: t.month,
+              negativeIntensity: clampTrendScore(t.negativeIntensity),
+              positiveFrequency: clampTrendScore(t.positiveFrequency),
+          };
           // AI가 생성한 데이터의 달이 실제 기록에 존재하면 그대로 사용
-          if (validMonths.has(t.month)) {
-              return t;
+          if (validMonths.size === 0 || validMonths.has(t.month)) {
+              return normalizedTrend;
           }
           // 기록이 없는 달은 0점으로 처리 (hallucination 방지)
           return {
-              ...t,
+              ...normalizedTrend,
               negativeIntensity: 0,
               positiveFrequency: 0
           };

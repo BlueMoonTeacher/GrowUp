@@ -226,7 +226,7 @@ const TrendChart = ({ data }: { data: MonthlyTrend[] }) => {
 
 
 const AnalysisModal = ({ student, onClose, onSaveAnalysis, onUpdateStudent, settings }: AnalysisModalProps): React.ReactElement => {
-  const { showAlert } = useModal();
+  const { showAlert, showToast } = useModal();
   const initialMode: BehaviorAnalysisMode = student.analysisResult?.mode || 'semester1';
   const [loading, setLoading] = useState(false);
   const [analysisMode, setAnalysisMode] = useState<BehaviorAnalysisMode>(initialMode);
@@ -437,7 +437,7 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, onUpdateStudent, sett
 
   const handleCopyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
-      showAlert("내용이 클립보드에 복사되었습니다.");
+      showToast("내용이 복사되었습니다.");
     });
   };
 

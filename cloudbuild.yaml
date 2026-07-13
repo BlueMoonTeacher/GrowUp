@@ -72,5 +72,6 @@ steps:
       - '--max-instances=5'
       - '--memory=512Mi'
       - '--cpu=1'
+      - '--timeout=300s'
 
 timeout: '1200s'

@@ -580,15 +580,10 @@ const EvaluationEntry = ({
     const [unsavedReasons, setUnsavedReasons] = useState<Record<string, EvaluationExceptionReason | ''>>({});
     const [isSaving, setIsSaving] = useState(false);
 
-    useEffect(() => {
-        if (!navigateToAssessmentId) return;
-        const target = assessments.find(a => a.id === navigateToAssessmentId);
-        if (!target) return;
-        setSelectedSemester(target.semester);
-        setSelectedSubject(target.subject);
-        setSelectedDomain(target.domain || '영역 없음');
-        setSelectedAssessId(target.id);
-    }, [navigateToAssessmentId, assessments]);
+    const navigationTarget = useMemo(
+        () => navigateToAssessmentId ? assessments.find(a => a.id === navigateToAssessmentId) : undefined,
+        [navigateToAssessmentId, assessments]
+    );
 
     // Reset local changes when assessment changes
     useEffect(() => {
@@ -605,16 +600,18 @@ const EvaluationEntry = ({
     const subjects = useMemo(() => Array.from(new Set(semesterAssessments.map(a => a.subject))).sort(sortSubjects), [semesterAssessments]);
     
     useEffect(() => {
+        if (navigationTarget) return;
         if (subjects.length > 0 && !subjects.includes(selectedSubject)) {
             setSelectedSubject(subjects[0]);
         }
-    }, [subjects, selectedSubject]);
+    }, [subjects, selectedSubject, navigationTarget]);
 
     const subjectAssessments = useMemo(() => semesterAssessments.filter(a => a.subject === selectedSubject), [semesterAssessments, selectedSubject]);
     
     const domains = useMemo(() => Array.from(new Set(subjectAssessments.map(a => a.domain || '영역 없음'))).sort(), [subjectAssessments]);
     
     useEffect(() => {
+        if (navigationTarget) return;
         if (domains.length > 0) {
              if (!domains.includes(selectedDomain)) {
                  setSelectedDomain(domains[0]);
@@ -622,11 +619,12 @@ const EvaluationEntry = ({
         } else {
             setSelectedDomain('');
         }
-    }, [domains, selectedDomain]);
+    }, [domains, selectedDomain, navigationTarget]);
 
     const domainAssessments = useMemo(() => subjectAssessments.filter(a => (a.domain || '영역 없음') === selectedDomain), [subjectAssessments, selectedDomain]);
 
     useEffect(() => {
+        if (navigationTarget) return;
         if (domainAssessments.length > 0) {
              if (!domainAssessments.find(a => a.id === selectedAssessId)) {
                  setSelectedAssessId(domainAssessments[0].id);
@@ -634,7 +632,15 @@ const EvaluationEntry = ({
         } else {
             setSelectedAssessId('');
         }
-    }, [domainAssessments, selectedAssessId]);
+    }, [domainAssessments, selectedAssessId, navigationTarget]);
+
+    useEffect(() => {
+        if (!navigationTarget) return;
+        setSelectedSemester(navigationTarget.semester);
+        setSelectedSubject(navigationTarget.subject);
+        setSelectedDomain(navigationTarget.domain || '영역 없음');
+        setSelectedAssessId(navigationTarget.id);
+    }, [navigationTarget]);
 
 
     const selectedAssessment = assessments.find(a => a.id === selectedAssessId);

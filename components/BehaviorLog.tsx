@@ -3,9 +3,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { BehaviorRecord, Student, AnalysisResult, BehaviorObservationType } from '../types';
 import AnalysisModal from './AnalysisModal';
+import BehaviorRecordHelperModal from './BehaviorRecordHelperModal';
 import { useModal } from '../context/ModalContext';
 import { AppSettings } from '../App';
 import { inferObservationType, resolveObservationType } from '../utils/behaviorUtils';
+import { BehaviorRecordExample } from '../constants/behaviorRecordHelper';
 
 interface BehaviorLogProps {
   student: Student;
@@ -47,8 +49,10 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
   const [content, setContent] = useState('');
   const [context, setContext] = useState('');
   const [followUp, setFollowUp] = useState('');
+  const [helperObservationType, setHelperObservationType] = useState<BehaviorObservationType | null>(null);
   const [filterMonth, setFilterMonth] = useState<string>('all');
   const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
+  const [isHelperModalOpen, setIsHelperModalOpen] = useState(false);
 
   // Editing State
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -68,8 +72,10 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
     setContent('');
     setContext('');
     setFollowUp('');
+    setHelperObservationType(null);
     setFilterMonth('all');
     setIsAnalysisModalOpen(false);
+    setIsHelperModalOpen(false);
     setEditingId(null);
     setEditData(null);
   }, [student.id]);
@@ -77,13 +83,14 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim()) return;
+    const resolvedObservationType = helperObservationType || inferObservationType(`${context} ${content} ${followUp}`);
 
     onAddRecord({
       date,
       period,
       content: content.trim(),
-      observationType: inferObservationType(`${context} ${content} ${followUp}`),
-      observationTypeSource: 'auto',
+      observationType: resolvedObservationType,
+      observationTypeSource: helperObservationType ? 'manual' : 'auto',
       context: context.trim(),
       followUp: followUp.trim(),
       timestamp: Date.now(),
@@ -91,6 +98,7 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
     setContent('');
     setContext('');
     setFollowUp('');
+    setHelperObservationType(null);
   };
 
   const handleSaveAnalysis = async (result: AnalysisResult) => {
@@ -104,6 +112,15 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
           }
       };
       await onUpdateStudent(updatedStudent);
+  };
+
+  const handleApplyHelperExample = (example: BehaviorRecordExample) => {
+      setContext(example.context);
+      setContent(example.content);
+      setFollowUp(example.followUp);
+      setHelperObservationType(example.observationType);
+      setIsHelperModalOpen(false);
+      showToast('예시 기록을 입력칸에 넣었습니다. 학생에게 맞게 수정해 주세요.');
   };
 
   const handleDownloadXls = () => {
@@ -216,6 +233,9 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
   };
 
   const inputClass = "w-full p-2 text-sm border border-base-300 bg-base-200 rounded-md focus:ring-primary focus:border-primary shadow-sm focus:bg-base-100 transition-colors text-base-content";
+  const helperObservationVisual = helperObservationType
+    ? OBSERVATION_TYPES.find(type => type.value === helperObservationType)
+    : null;
 
   return (
     <div className="relative flex max-md:h-auto max-md:overflow-visible flex-col overflow-hidden rounded-xl border border-base-300/60 bg-base-100 p-4 max-md:min-h-0 md:h-full md:min-h-0">
@@ -298,7 +318,35 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
             placeholder="교사의 지도 또는 이후 변화 (선택)"
             className={`${inputClass} mt-2`}
           />
-          <div className="flex justify-end mt-2">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsHelperModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700 shadow-sm transition-colors hover:bg-indigo-100 hover:border-indigo-300 active:scale-95"
+              title="예시 문장을 골라 행동발달 누가기록 입력을 돕습니다."
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
+                <path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" />
+                <path fillRule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clipRule="evenodd" />
+              </svg>
+              행발기록 도우미
+            </button>
+            {helperObservationVisual && (
+              <span className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold ${helperObservationVisual.activeClass}`}>
+                도우미 분류 · {helperObservationVisual.label}
+                <button
+                  type="button"
+                  onClick={() => setHelperObservationType(null)}
+                  className="ml-1 rounded-full px-1 text-[11px] opacity-70 hover:bg-white/70 hover:opacity-100"
+                  title="도우미 분류를 해제하고 내용 기준 자동 분류 사용"
+                  aria-label="도우미 분류 해제"
+                >
+                  ×
+                </button>
+              </span>
+            )}
+            </div>
             <button
               type="submit"
               className="bg-primary text-primary-content font-bold py-2 px-5 rounded-lg hover:bg-primary-focus shadow-sm transition-colors text-sm"
@@ -484,6 +532,13 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
             onClose={() => setIsAnalysisModalOpen(false)} 
             onSaveAnalysis={handleSaveAnalysis}
             settings={settings}
+          />
+      )}
+
+      {isHelperModalOpen && (
+          <BehaviorRecordHelperModal
+            onClose={() => setIsHelperModalOpen(false)}
+            onApply={handleApplyHelperExample}
           />
       )}
     </div>

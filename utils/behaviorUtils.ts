@@ -1,5 +1,7 @@
 import { BehaviorObservationType, BehaviorRecord } from '../types';
 
+export const getUtf8ByteLength = (text: string): number => new TextEncoder().encode(text).length;
+
 export const inferObservationType = (text: string): BehaviorObservationType => {
   const normalized = text.replace(/\s+/g, ' ');
   const positiveExceptions = ['다툼을 중재', '갈등을 조정', '갈등을 해결', '포기하지 않음'];

@@ -135,7 +135,7 @@ const analysisSchema = {
         keywords: {
             type: Type.ARRAY,
             items: { type: Type.STRING },
-            description: "행동 특성을 나타내는 핵심 키워드 3~5개 (예: #책임감, #배려심)"
+            description: "행동 특성을 요약하는 AI 분석 태그 3~5개. # 기호 없이 단어 또는 짧은 구로 작성 (예: 책임감, 배려심)"
         },
         summary: {
             type: Type.STRING,

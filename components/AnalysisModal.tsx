@@ -4,6 +4,7 @@ import { Student, AnalysisResult, MonthlyTrend, BehaviorAnalysisMode } from '../
 import { analyzeBehaviorRecords, softenBehaviorReport } from '../services/geminiService';
 import { useModal } from '../context/ModalContext';
 import { AppSettings } from '../App';
+import { getUtf8ByteLength } from '../utils/behaviorUtils';
 
 interface AnalysisModalProps {
   student: Student;
@@ -51,6 +52,8 @@ const sortMonthsByAcademicYear = (a: string, b: string) => {
     if (idxA !== idxB) return idxA - idxB;
     return a.localeCompare(b); // 같은 달이면 연도순
 };
+
+const formatAnalysisTag = (tag: string): string => tag.replace(/^#+\s*/, '').trim();
 
 
 // SVG Graph Component
@@ -220,6 +223,7 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
 
   const canUndoReport = reportHistoryIndex > 0;
   const canRedoReport = reportHistoryIndex >= 0 && reportHistoryIndex < reportHistory.length - 1;
+  const reportByteCount = useMemo(() => getUtf8ByteLength(editableReport), [editableReport]);
 
   const resetReportHistory = (report: string) => {
       setEditableReport(report);
@@ -464,12 +468,12 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
                                     <path fillRule="evenodd" d="M17.707 9.293a1 1 0 010 1.414l-7 7a1 1 0 01-1.414 0l-7-7A.997.997 0 012 10V5a3 3 0 013-3h5c.256 0 .512.098.707.293l7 7zM5 6a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                                 </svg>
-                                핵심 키워드
+                                AI 분석 태그
                             </h3>
                             <div className="flex flex-wrap gap-1.5">
-                                {result.keywords.slice(0, 6).map((keyword, idx) => (
+                                {result.keywords.slice(0, 6).map((tag, idx) => (
                                     <span key={idx} className="px-2 py-0.5 bg-secondary/60 text-secondary-content rounded-md text-[11px] font-bold border border-green-100/50 hover:bg-secondary transition-colors cursor-default">
-                                    #{keyword}
+                                    #{formatAnalysisTag(tag)}
                                     </span>
                                 ))}
                             </div>
@@ -504,13 +508,21 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
                     {/* CENTER COLUMN (4/12): Editable Report -> Decreased Width */}
                     <div className="xl:col-span-4 flex flex-col h-[500px] xl:h-full overflow-hidden">
                          <div className="bg-white rounded-xl shadow-sm border border-blue-200 flex-1 flex flex-col overflow-hidden h-full ring-4 ring-blue-50">
-                            <div className="px-4 py-3 border-b border-blue-100 bg-blue-50/50 flex justify-between items-center shrink-0">
-                                <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wider flex items-center gap-1.5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
-                                    </svg>
-                                    {result.mode === 'yearEnd' ? '학년말' : '1학기'} 기록 초안
-                                </h3>
+                            <div className="px-4 py-3 border-b border-blue-100 bg-blue-50/50 flex justify-between items-center gap-3 shrink-0">
+                                <div className="min-w-0 flex flex-col gap-1">
+                                    <h3 className="text-xs font-bold text-blue-800 uppercase tracking-wider flex items-center gap-1.5">
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd" />
+                                        </svg>
+                                        <span className="truncate">{result.mode === 'yearEnd' ? '학년말' : '1학기'} 기록 초안</span>
+                                    </h3>
+                                    <span
+                                        className="w-fit rounded-md border border-blue-200 bg-white px-2.5 py-1 text-sm font-extrabold tabular-nums text-blue-700 shadow-sm"
+                                        title="NEIS 표시와 같은 UTF-8 바이트 수"
+                                    >
+                                        {reportByteCount.toLocaleString()} Byte
+                                    </span>
+                                </div>
                                 <div className="flex flex-wrap justify-end gap-1.5">
                                     <button
                                         onClick={handleUndoReport}

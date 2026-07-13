@@ -202,6 +202,7 @@ export interface Student {
   parentRequests: string;
   behaviorRecords?: BehaviorRecord[];
   attendanceRecords?: AttendanceRecord[];
+  studentTraits?: string[];
   analysisResult?: AnalysisResult;
   behaviorAnalysisResults?: Partial<Record<BehaviorAnalysisMode, AnalysisResult>>;
   semester1Opinion?: string; // 이전 데이터 호환용(새 화면에서는 사용하지 않음)

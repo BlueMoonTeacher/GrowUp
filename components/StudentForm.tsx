@@ -36,6 +36,7 @@ const getDefaultStudent = (settings: AppSettings): Omit<Student, 'id'> => ({
   learningStatus: '', healthStatus: '', parentRequests: '',
   behaviorRecords: [],
   attendanceRecords: [],
+  studentTraits: [],
 });
 
 const createFilledStudentData = (student: Student | Omit<Student, 'id'> | null, settings: AppSettings): Student | Omit<Student, 'id'> => {
@@ -61,6 +62,7 @@ const createFilledStudentData = (student: Student | Omit<Student, 'id'> | null, 
   const activitiesData = [...(student.afterSchool?.activities ?? [])];
   const behaviorRecords = [...(student.behaviorRecords ?? [])];
   const attendanceRecords = [...(student.attendanceRecords ?? [])];
+  const studentTraits = [...(student.studentTraits ?? [])];
 
   const padArray = (arr: any[], minLength: number, filler: object) => {
     if (arr.length < minLength) {
@@ -102,6 +104,7 @@ const createFilledStudentData = (student: Student | Omit<Student, 'id'> | null, 
     },
     behaviorRecords: behaviorRecords,
     attendanceRecords: attendanceRecords,
+    studentTraits: studentTraits,
   };
   return filledStudent;
 };

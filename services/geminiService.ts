@@ -209,15 +209,16 @@ const assessmentPlanSchema = {
 const getTargetBehaviorRecords = (records: BehaviorRecord[], mode: BehaviorAnalysisMode) => (
     mode === 'semester1'
         ? records.filter(record => {
+            if (!record.date || record.date.length < 7) return false;
             const month = Number(record.date.slice(5, 7));
             return month >= 3 && month <= 8;
         })
-        : records
+        : records.filter(record => Boolean(record.date))
 );
 
 const formatBehaviorRecordsForPrompt = (records: BehaviorRecord[], mode: BehaviorAnalysisMode) => (
     [...getTargetBehaviorRecords(records, mode)]
-        .sort((a, b) => a.date.localeCompare(b.date))
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
         .map(r => {
             const resolvedType = resolveObservationType(r);
             const type = resolvedType === 'positive' ? '긍정 행동' : resolvedType === 'guidance' ? '지도 필요' : '일반 관찰';
@@ -291,10 +292,12 @@ export async function analyzeBehaviorRecords(
     records: BehaviorRecord[],
     mode: BehaviorAnalysisMode = 'semester1',
     apiKey?: string,
-    model?: string
+    model?: string,
+    studentTraits: string[] = []
 ): Promise<AnalysisResult> {
-    if (!records || records.length === 0) {
-        throw new Error("분석할 기록이 없습니다.");
+    const normalizedTraits = studentTraits.map(trait => trait.trim()).filter(Boolean);
+    if ((!records || records.length === 0) && normalizedTraits.length === 0) {
+        throw new Error("분석할 기록이나 학생 특성이 없습니다.");
     }
 
     const ai = getAiClient(apiKey);
@@ -302,8 +305,8 @@ export async function analyzeBehaviorRecords(
 
     const recordsText = formatBehaviorRecordsForPrompt(records, mode);
 
-    if (!recordsText) {
-        throw new Error(mode === 'semester1' ? '1학기에 해당하는 행동 기록이 없습니다.' : '분석할 행동 기록이 없습니다.');
+    if (!recordsText && normalizedTraits.length === 0) {
+        throw new Error(mode === 'semester1' ? '1학기에 해당하는 행동 기록이나 학생 특성이 없습니다.' : '분석할 행동 기록이나 학생 특성이 없습니다.');
     }
 
     const modeTitle = mode === 'semester1' ? '1학기 행동특성 및 종합의견 초안' : '학년말 행동특성 및 종합의견 초안';
@@ -319,21 +322,25 @@ export async function analyzeBehaviorRecords(
     [학생 이름]: ${studentName}
     
     [수시 관찰 기록 (누가기록)]:
-    ${recordsText}
+    ${recordsText || '해당 기간에 입력된 수시 관찰 기록이 없음.'}
+
+    [교사가 선택한 학생 특성]:
+    ${normalizedTraits.length > 0 ? normalizedTraits.map(trait => `- ${trait}`).join('\n') : '선택된 학생 특성 없음.'}
 
     [작성 목표]
     - ${sourceDescription}하십시오.
-    - AI 결과는 교사가 검토하고 수정할 초안이며, 관찰 기록에 없는 사실은 만들지 마십시오.
+    - AI 결과는 교사가 검토하고 수정할 초안이며, 관찰 기록과 교사가 선택한 학생 특성에 없는 사실은 만들지 마십시오.
     - 단순 나열보다 반복적으로 관찰된 특성과 구체적인 행동 근거가 연결되도록 작성하십시오.
 
     [분석 및 작성 원칙 - **필수 준수**]
     1. **이름 언급 금지 (매우 중요):** 문장의 주어로 학생의 이름을 절대 사용하지 마십시오. 바로 "수업 시간에는...", "평소...", "친구들과..." 등으로 문장을 시작하십시오.
     2. **분량 조절:** ${lengthGuide}로 작성하십시오.
-    3. **직접 관찰 근거:** 성격을 단정하거나 심리 상태를 추측하지 말고, 기록된 상황과 행동을 구체적으로 서술하십시오.
-    4. **지도 필요 기록 보존:** '지도 필요' 기록을 임의로 삭제하거나 긍정적으로 왜곡하지 마십시오. 반복되거나 중요한 행동은 관찰 사실 중심으로 포함하되 낙인찍는 표현을 사용하지 마십시오.
-    5. **변화의 사실성:** 지도 후 변화가 기록에 있을 때만 변화를 서술하고, 기록되지 않은 반성·노력·성장 가능성을 만들어내지 마십시오.
-    6. **문체와 서식:** 모든 문장은 '~함.', '~임.', '~보임.' 등의 명사형 어미와 마침표로 끝내고, 줄바꿈 없이 온점 뒤 한 칸을 띄워 이어 쓰십시오.
-    7. **기재 제한:** 학생 이름, 공인어학시험, 교내외 대회·수상, 장학생, 자격증, 상호명·기관명 및 사교육 유발 표현을 포함하지 마십시오. 한글을 우선 사용하고 불필요한 특수문자를 쓰지 마십시오.
+    3. **근거 우선순위:** 수시 관찰 기록을 가장 우선으로 반영하고, 학생 특성은 기록이 부족하거나 학생의 전반적 경향을 보완할 때만 사용하십시오.
+    4. **직접 관찰 근거:** 성격을 단정하거나 심리 상태를 추측하지 말고, 기록된 상황과 행동을 구체적으로 서술하십시오. 학생 특성만 있는 경우에는 구체적 사건을 만들어내지 말고 일반적 경향으로 조심스럽게 표현하십시오.
+    5. **지도 필요 기록 보존:** '지도 필요' 기록이나 지원 필요 특성을 임의로 삭제하거나 긍정적으로 왜곡하지 마십시오. 반복되거나 중요한 행동은 관찰 사실 중심으로 포함하되 낙인찍는 표현을 사용하지 마십시오.
+    6. **변화의 사실성:** 지도 후 변화가 기록에 있을 때만 변화를 서술하고, 기록되지 않은 반성·노력·성장 가능성을 만들어내지 마십시오.
+    7. **문체와 서식:** 모든 문장은 '~함.', '~임.', '~보임.' 등의 명사형 어미와 마침표로 끝내고, 줄바꿈 없이 온점 뒤 한 칸을 띄워 이어 쓰십시오.
+    8. **기재 제한:** 학생 이름, 공인어학시험, 교내외 대회·수상, 장학생, 자격증, 상호명·기관명 및 사교육 유발 표현을 포함하지 마십시오. 한글을 우선 사용하고 불필요한 특수문자를 쓰지 마십시오.
 
     [좋은 예시 스타일]
     "자신의 생각과 감정을 솔직하고 분명하게 표현하며, 교사의 설명을 주의 깊게 듣고 빠르게 이해하여 수업 내용에 잘 따라옴. 특히 모둠 활동에서 친구들의 의견을 경청하고 조율하는 역할을 자처하여 원만한 합의를 이끌어내는 리더십을 보임. (중략 ... 구체적 사례 포함) ... 점차 안정된 학습 태도를 형성해가고 있어 다음 학년에서의 성장이 더욱 기대됨."

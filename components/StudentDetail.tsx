@@ -1,6 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Student, Guardian, Sibling, AfterSchoolActivity } from '../types';
+import { findStudentTraitOption } from '../constants/studentTraits';
 
 interface StudentDetailProps {
   student: Student;
@@ -103,6 +104,12 @@ const HealthIcon = (): React.ReactElement => (
 
 const StudentDetail = ({ student, onEdit, onDelete }: StudentDetailProps): React.ReactElement => {
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const traitToneClass = (trait: string) => {
+    const tone = findStudentTraitOption(trait)?.tone;
+    if (tone === 'support') return 'border-rose-200 bg-rose-50 text-rose-700';
+    if (tone === 'positive') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    return 'border-slate-200 bg-slate-50 text-slate-700';
+  };
 
   useEffect(() => {
     setIsMoreOpen(false);
@@ -277,6 +284,20 @@ const StudentDetail = ({ student, onEdit, onDelete }: StudentDetailProps): React
 
       {isMoreOpen && (
         <div className="space-y-5">
+          <InfoCard title="학생 특성" icon={<DocumentIcon />}>
+            {(student.studentTraits || []).length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {(student.studentTraits || []).map(trait => (
+                  <span key={trait} className={`rounded-full border px-2.5 py-1 text-xs font-bold ${traitToneClass(trait)}`}>
+                    {trait}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-base-content-secondary text-xs italic">설정된 학생 특성이 없습니다.</p>
+            )}
+          </InfoCard>
+
           <InfoCard title="방과 후 활동 및 흥미" icon={<ActivityIcon />}>
             <div className="space-y-4">
               <div>

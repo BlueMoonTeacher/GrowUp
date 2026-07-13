@@ -125,7 +125,9 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
 
   const handleDownloadXls = () => {
       const records = [...(student.behaviorRecords || [])].sort((a, b) => {
-          if (a.date !== b.date) return a.date.localeCompare(b.date);
+          const dateA = a.date || '';
+          const dateB = b.date || '';
+          if (dateA !== dateB) return dateA.localeCompare(dateB);
           return a.timestamp - b.timestamp;
       });
       const rows = [['날짜별', '시간별', '구분', '관찰 상황', '구체적 행동', '지도 및 후속 변화']].concat(
@@ -209,16 +211,20 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
   const filteredRecords = useMemo(() => {
     let records = [...(student.behaviorRecords || [])];
     if (filterMonth !== 'all') {
-        records = records.filter(r => r.date.startsWith(filterMonth));
+        records = records.filter(r => r.date?.startsWith(filterMonth));
         // Sort ascending (oldest first) when filtered by month
         return records.sort((a, b) => {
-            if (a.date !== b.date) return a.date.localeCompare(b.date);
+            const dateA = a.date || '';
+            const dateB = b.date || '';
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
             return a.timestamp - b.timestamp;
         });
     }
     // Sort descending (newest first) when showing all
     return records.sort((a, b) => {
-        if (a.date !== b.date) return b.date.localeCompare(a.date);
+        const dateA = a.date || '';
+        const dateB = b.date || '';
+        if (dateA !== dateB) return dateB.localeCompare(dateA);
         return b.timestamp - a.timestamp;
     });
   }, [student.behaviorRecords, filterMonth]);
@@ -531,6 +537,7 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
             student={student} 
             onClose={() => setIsAnalysisModalOpen(false)} 
             onSaveAnalysis={handleSaveAnalysis}
+            onUpdateStudent={onUpdateStudent}
             settings={settings}
           />
       )}

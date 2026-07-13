@@ -5,11 +5,14 @@ import { analyzeBehaviorRecords, softenBehaviorReport } from '../services/gemini
 import { useModal } from '../context/ModalContext';
 import { AppSettings } from '../App';
 import { getUtf8ByteLength } from '../utils/behaviorUtils';
+import StudentTraitsModal from './StudentTraitsModal';
+import { findStudentTraitOption } from '../constants/studentTraits';
 
 interface AnalysisModalProps {
   student: Student;
   onClose: () => void;
   onSaveAnalysis: (result: AnalysisResult) => Promise<void>;
+  onUpdateStudent: (student: Student) => Promise<void>;
   settings?: AppSettings;
 }
 
@@ -204,7 +207,7 @@ const TrendChart = ({ data }: { data: MonthlyTrend[] }) => {
 };
 
 
-const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisModalProps): React.ReactElement => {
+const AnalysisModal = ({ student, onClose, onSaveAnalysis, onUpdateStudent, settings }: AnalysisModalProps): React.ReactElement => {
   const { showAlert } = useModal();
   const initialMode: BehaviorAnalysisMode = student.analysisResult?.mode || 'semester1';
   const [loading, setLoading] = useState(false);
@@ -213,6 +216,8 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
     student.behaviorAnalysisResults?.[initialMode] || student.analysisResult || null
   );
   const [error, setError] = useState<string | null>(null);
+  const [selectedStudentTraits, setSelectedStudentTraits] = useState<string[]>(student.studentTraits || []);
+  const [isTraitsModalOpen, setIsTraitsModalOpen] = useState(false);
   
   // State for editable report
   const [editableReport, setEditableReport] = useState('');
@@ -224,6 +229,12 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
   const canUndoReport = reportHistoryIndex > 0;
   const canRedoReport = reportHistoryIndex >= 0 && reportHistoryIndex < reportHistory.length - 1;
   const reportByteCount = useMemo(() => getUtf8ByteLength(editableReport), [editableReport]);
+  const traitToneClass = (trait: string) => {
+      const tone = findStudentTraitOption(trait)?.tone;
+      if (tone === 'support') return 'border-rose-200 bg-rose-50 text-rose-700';
+      if (tone === 'positive') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+      return 'border-slate-200 bg-slate-50 text-slate-700';
+  };
 
   const resetReportHistory = (report: string) => {
       setEditableReport(report);
@@ -281,6 +292,10 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
     }
   }, [result]);
 
+  useEffect(() => {
+    setSelectedStudentTraits(student.studentTraits || []);
+  }, [student.id, student.studentTraits]);
+
   // 1. 입력된 기록이 있는 달(Month) 추출
   const validMonths = useMemo(() => {
       const months = new Set<string>();
@@ -311,8 +326,8 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
   }, [result, validMonths]);
 
   const handleAnalyze = async () => {
-    if (!student.behaviorRecords || student.behaviorRecords.length === 0) {
-        setError("분석할 행동 기록이 없습니다. 먼저 기록을 추가해주세요.");
+    if ((!student.behaviorRecords || student.behaviorRecords.length === 0) && selectedStudentTraits.length === 0) {
+        setError("분석할 행동 기록 또는 학생 특성이 필요합니다.");
         return;
     }
 
@@ -321,10 +336,11 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
     try {
       const analysisData = await analyzeBehaviorRecords(
           student.name.hangul, 
-          student.behaviorRecords, 
+          student.behaviorRecords || [], 
           analysisMode,
           settings?.geminiApiKey,
-          settings?.geminiModel
+          settings?.geminiModel,
+          selectedStudentTraits
       );
       setResult(analysisData);
       await onSaveAnalysis(analysisData);
@@ -334,6 +350,18 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSaveStudentTraits = async (traits: string[]) => {
+      setSelectedStudentTraits(traits);
+      setIsTraitsModalOpen(false);
+      try {
+          await onUpdateStudent({ ...student, studentTraits: traits });
+          await showAlert("학생 특성이 저장되었습니다.");
+      } catch (e) {
+          console.error(e);
+          await showAlert("학생 특성 저장 중 오류가 발생했습니다.");
+      }
   };
 
   const handleModeChange = (mode: BehaviorAnalysisMode) => {
@@ -425,6 +453,26 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
                 <button type="button" onClick={() => handleModeChange('semester1')} title="3월부터 8월까지의 기록만 분석" className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${analysisMode === 'semester1' ? 'bg-primary text-white' : 'text-base-content-secondary hover:bg-base-100'}`}>1학기용 · 3~8월</button>
                 <button type="button" onClick={() => handleModeChange('yearEnd')} title="학년도 전체 누적 기록을 분석" className={`rounded-md px-2.5 py-1 text-[11px] font-bold ${analysisMode === 'yearEnd' ? 'bg-primary text-white' : 'text-base-content-secondary hover:bg-base-100'}`}>학년말용 · 전체</button>
               </div>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setIsTraitsModalOpen(true)}
+                  className="rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700 transition-colors hover:bg-indigo-100"
+                  title="초안 생성에 참고할 학생 특성 설정"
+                >
+                  학생 특성 {selectedStudentTraits.length}개
+                </button>
+                {selectedStudentTraits.slice(0, 3).map(trait => (
+                  <span key={trait} className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${traitToneClass(trait)}`}>
+                    {trait}
+                  </span>
+                ))}
+                {selectedStudentTraits.length > 3 && (
+                  <span className="rounded-full bg-base-200 px-2 py-0.5 text-[10px] font-bold text-base-content-secondary">
+                    +{selectedStudentTraits.length - 3}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
           <button onClick={onClose} className="text-base-content-secondary hover:text-base-content p-2 rounded-full hover:bg-base-200 transition-colors">
@@ -471,11 +519,41 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
                                 AI 분석 태그
                             </h3>
                             <div className="flex flex-wrap gap-1.5">
-                                {result.keywords.slice(0, 6).map((tag, idx) => (
+                                {(result.keywords || []).slice(0, 6).map((tag, idx) => (
                                     <span key={idx} className="px-2 py-0.5 bg-secondary/60 text-secondary-content rounded-md text-[11px] font-bold border border-green-100/50 hover:bg-secondary transition-colors cursor-default">
                                     #{formatAnalysisTag(tag)}
                                     </span>
                                 ))}
+                            </div>
+                        </div>
+
+                        {/* Student Traits */}
+                        <div className="bg-white p-3 rounded-xl shadow-sm border border-indigo-100 shrink-0">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                                <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-wider flex items-center gap-1.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81H7.03a1 1 0 00.95-.69l1.07-3.292z" />
+                                    </svg>
+                                    학생 특성
+                                </h3>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsTraitsModalOpen(true)}
+                                    className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100"
+                                >
+                                    설정
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                                {selectedStudentTraits.length > 0 ? selectedStudentTraits.slice(0, 8).map(trait => (
+                                    <span key={trait} className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${traitToneClass(trait)}`}>
+                                        {trait}
+                                    </span>
+                                )) : (
+                                    <span className="text-[11px] font-medium text-base-content-secondary">
+                                        선택된 학생 특성이 없습니다.
+                                    </span>
+                                )}
                             </div>
                         </div>
 
@@ -686,6 +764,13 @@ const AnalysisModal = ({ student, onClose, onSaveAnalysis, settings }: AnalysisM
             </button>
         </div>
       </div>
+      {isTraitsModalOpen && (
+        <StudentTraitsModal
+          initialTraits={selectedStudentTraits}
+          onClose={() => setIsTraitsModalOpen(false)}
+          onSave={handleSaveStudentTraits}
+        />
+      )}
     </div>
   );
 };

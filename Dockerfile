@@ -4,22 +4,25 @@ FROM node:20-alpine as build
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
 COPY . .
 RUN npm run build
 
 # Production stage
-FROM nginx:alpine
+FROM node:20-alpine AS runtime
 
-# Copy built assets to Nginx html folder
-COPY --from=build /app/dist /usr/share/nginx/html
+WORKDIR /app
+ENV NODE_ENV=production
 
-# Custom nginx config to support React Router SPA fallback and port 8080.
-# The official nginx image renders templates with environment variables on start,
-# so Cloud Run's GEMINI_API_KEY can be injected into the API proxy at runtime.
-COPY nginx.conf /etc/nginx/templates/default.conf.template
+COPY package*.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
+
+COPY --from=build /app/dist ./dist
+COPY server.mjs ./server.mjs
+
+USER node
 
 EXPOSE 8080
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["node", "server.mjs"]

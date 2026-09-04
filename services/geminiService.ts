@@ -1,8 +1,9 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { Type } from "@google/genai";
 import { Student, BehaviorRecord, AnalysisResult, Assessment, BehaviorAnalysisMode } from "../types";
 import { normalizeGeminiModel } from "../constants/geminiModels";
 import { resolveObservationType } from "../utils/behaviorUtils";
+import { generateGeminiContent } from "./secureGeminiApi";
 
 export interface ExtractedScheduleDraft {
     date: string;
@@ -14,16 +15,6 @@ export interface ExtractedScheduleDraft {
     memo: string;
     confidence?: string;
     needsReview?: boolean;
-}
-
-// Helper to initialize AI client with dynamic key
-function getAiClient(apiKey?: string) {
-    const resolvedApiKey = apiKey?.trim() || process.env.GEMINI_API_KEY || 'proxy-managed';
-
-    if (!resolvedApiKey || resolvedApiKey.trim() === '') {
-        throw new Error("Gemini API 키가 설정되지 않았습니다. 로그인 후 우측 상단의 '설정' 메뉴에서 직접 발급받은 API 키를 입력해주세요.");
-    }
-    return new GoogleGenAI({ apiKey: resolvedApiKey });
 }
 
 // Helper to convert a File object to a GoogleGenAI.Part object.
@@ -216,17 +207,22 @@ const getTargetBehaviorRecords = (records: BehaviorRecord[], mode: BehaviorAnaly
         : records.filter(record => Boolean(record.date))
 );
 
-const formatBehaviorRecordsForPrompt = (records: BehaviorRecord[], mode: BehaviorAnalysisMode) => (
+const redactStudentName = (value: string, studentName?: string) => {
+    const normalizedName = studentName?.trim();
+    return normalizedName ? value.split(normalizedName).join('해당 학생') : value;
+};
+
+const formatBehaviorRecordsForPrompt = (records: BehaviorRecord[], mode: BehaviorAnalysisMode, studentName?: string) => (
     [...getTargetBehaviorRecords(records, mode)]
         .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
         .map(r => {
             const resolvedType = resolveObservationType(r);
             const type = resolvedType === 'positive' ? '긍정 행동' : resolvedType === 'guidance' ? '지도 필요' : '일반 관찰';
             return [
-                `[${r.date} ${r.period} / ${type}]`,
-                r.context ? `관찰 상황: ${r.context}` : '',
-                `구체적 행동: ${r.content}`,
-                r.followUp ? `지도 및 후속 변화: ${r.followUp}` : ''
+                `[${(r.date || '').slice(0, 7)} ${r.period} / ${type}]`,
+                r.context ? `관찰 상황: ${redactStudentName(r.context, studentName)}` : '',
+                `구체적 행동: ${redactStudentName(r.content, studentName)}`,
+                r.followUp ? `지도 및 후속 변화: ${redactStudentName(r.followUp, studentName)}` : ''
             ].filter(Boolean).join(' ');
         })
         .join("\n")
@@ -251,8 +247,7 @@ const scheduleDraftSchema = {
 };
 
 
-export async function extractStudentInfoFromFile(file: File, apiKey?: string, model?: string): Promise<Omit<Student, 'id'>[]> {
-    const ai = getAiClient(apiKey);
+export async function extractStudentInfoFromFile(file: File, _apiKey?: string, model?: string): Promise<Omit<Student, 'id'>[]> {
     const selectedModel = normalizeGeminiModel(model);
 
     const imagePart = await fileToGenerativePart(file);
@@ -260,7 +255,7 @@ export async function extractStudentInfoFromFile(file: File, apiKey?: string, mo
     const prompt = `다음은 여러 학생의 정보가 포함될 수 있는 학생 기초 조사서 파일입니다. 파일에 있는 모든 학생의 정보를 추출하여, 제공된 스키마에 따라 각 학생을 객체로 하는 JSON 배열을 생성해주세요. 모든 필드를 채우려고 노력하되, 이미지에 정보가 없는 필드는 빈 문자열("")이나 적절한 기본값(예: 불리언의 경우 false, 빈 배열 [])으로 남겨두세요. 날짜 형식은 YYYY-MM-DD를 따라야 합니다.`;
 
     try {
-        const response = await ai.models.generateContent({
+        const response = await generateGeminiContent({
             model: selectedModel,
             contents: { parts: [imagePart, { text: prompt }] },
             config: {
@@ -291,7 +286,7 @@ export async function analyzeBehaviorRecords(
     studentName: string,
     records: BehaviorRecord[],
     mode: BehaviorAnalysisMode = 'semester1',
-    apiKey?: string,
+    _apiKey?: string,
     model?: string,
     studentTraits: string[] = []
 ): Promise<AnalysisResult> {
@@ -300,10 +295,9 @@ export async function analyzeBehaviorRecords(
         throw new Error("분석할 기록이나 학생 특성이 없습니다.");
     }
 
-    const ai = getAiClient(apiKey);
     const selectedModel = normalizeGeminiModel(model);
 
-    const recordsText = formatBehaviorRecordsForPrompt(records, mode);
+    const recordsText = formatBehaviorRecordsForPrompt(records, mode, studentName);
 
     if (!recordsText && normalizedTraits.length === 0) {
         throw new Error(mode === 'semester1' ? '1학기에 해당하는 행동 기록이나 학생 특성이 없습니다.' : '분석할 행동 기록이나 학생 특성이 없습니다.');
@@ -319,7 +313,7 @@ export async function analyzeBehaviorRecords(
     당신은 대한민국 초등학교 생활기록부 작성 전문가입니다. 
     제공된 **'2026학년도 학교생활기록부 기재요령'**을 준수하여 다음 학생의 **${modeTitle}**을 작성하세요.
 
-    [학생 이름]: ${studentName}
+    [학생 식별]: 이름을 제거한 가명 학생 1명
     
     [수시 관찰 기록 (누가기록)]:
     ${recordsText || '해당 기간에 입력된 수시 관찰 기록이 없음.'}
@@ -347,7 +341,7 @@ export async function analyzeBehaviorRecords(
     `;
 
     try {
-        const response = await ai.models.generateContent({
+        const response = await generateGeminiContent({
             model: selectedModel,
             contents: { parts: [{ text: prompt }] },
             config: {
@@ -379,19 +373,18 @@ export async function softenBehaviorReport(
     records: BehaviorRecord[],
     draftReport: string,
     mode: BehaviorAnalysisMode = 'semester1',
-    apiKey?: string,
+    _apiKey?: string,
     model?: string
 ): Promise<string> {
     if (!draftReport.trim()) {
         throw new Error("순화할 초안이 없습니다.");
     }
 
-    const recordsText = formatBehaviorRecordsForPrompt(records || [], mode);
+    const recordsText = formatBehaviorRecordsForPrompt(records || [], mode, studentName);
     if (!recordsText) {
         throw new Error(mode === 'semester1' ? '1학기에 해당하는 행동 기록이 없습니다.' : '분석할 행동 기록이 없습니다.');
     }
 
-    const ai = getAiClient(apiKey);
     const selectedModel = normalizeGeminiModel(model);
     const modeTitle = mode === 'semester1' ? '1학기 행동특성 및 종합의견 초안' : '학년말 행동특성 및 종합의견 초안';
     const lengthGuide = mode === 'semester1' ? '4~6문장, 공백 포함 400~600자 내외' : '5~7문장, 공백 포함 500~700자 내외';
@@ -400,7 +393,7 @@ export async function softenBehaviorReport(
     당신은 대한민국 초등학교 생활기록부 작성 전문가입니다.
     아래의 수시 관찰 기록과 기존 ${modeTitle}을 바탕으로, 교사가 검토할 수 있는 순화 초안으로 다시 작성하세요.
 
-    [학생 이름]: ${studentName}
+    [학생 식별]: 이름을 제거한 가명 학생 1명
 
     [수시 관찰 기록]:
     ${recordsText}
@@ -425,7 +418,7 @@ export async function softenBehaviorReport(
     `;
 
     try {
-        const response = await ai.models.generateContent({
+        const response = await generateGeminiContent({
             model: selectedModel,
             contents: { parts: [{ text: prompt }] },
             config: {
@@ -446,8 +439,7 @@ export async function softenBehaviorReport(
     }
 }
 
-export async function extractAssessmentPlanFromFile(file: File, apiKey?: string, model?: string): Promise<Omit<Assessment, 'id' | 'createdAt' | 'schoolYear'>[]> {
-    const ai = getAiClient(apiKey);
+export async function extractAssessmentPlanFromFile(file: File, _apiKey?: string, model?: string): Promise<Omit<Assessment, 'id' | 'createdAt' | 'schoolYear'>[]> {
     const selectedModel = normalizeGeminiModel(model);
 
     const imagePart = await fileToGenerativePart(file);
@@ -482,7 +474,7 @@ export async function extractAssessmentPlanFromFile(file: File, apiKey?: string,
     `;
 
     try {
-        const response = await ai.models.generateContent({
+        const response = await generateGeminiContent({
             model: selectedModel,
             contents: { parts: [imagePart, { text: prompt }] },
             config: {
@@ -510,10 +502,9 @@ export async function extractScheduleEventsFromImage(
     file: File,
     categories: string[],
     referenceDate: string,
-    apiKey?: string,
+    _apiKey?: string,
     model?: string
 ): Promise<ExtractedScheduleDraft[]> {
-    const ai = getAiClient(apiKey);
     const selectedModel = normalizeGeminiModel(model);
     const imagePart = await fileToGenerativePart(file);
     const availableCategories = categories.length ? categories : ['업무'];
@@ -545,7 +536,7 @@ export async function extractScheduleEventsFromImage(
     `;
 
     try {
-        const response = await ai.models.generateContent({
+        const response = await generateGeminiContent({
             model: selectedModel,
             contents: { parts: [imagePart, { text: prompt }] },
             config: {
@@ -594,7 +585,7 @@ export async function extractScheduleEventsFromImage(
             .filter((row: ExtractedScheduleDraft) => row.title.length > 0);
     } catch (error) {
         console.error("Error extracting schedule from image:", error);
-        throw new Error("캡처 이미지에서 일정을 분석하지 못했습니다.");
+        throw error instanceof Error ? error : new Error("캡처 이미지에서 일정을 분석하지 못했습니다.");
     }
 }
 
@@ -603,10 +594,9 @@ export async function generateSubjectComment(
     subject: string,
     evaluations: { element: string; level: string; criteriaDetail: string }[],
     sentenceCount: number = 2,
-    apiKey?: string,
+    _apiKey?: string,
     model?: string
 ): Promise<string> {
-    const ai = getAiClient(apiKey);
     const selectedModel = normalizeGeminiModel(model);
 
     if (!evaluations || evaluations.length === 0) {
@@ -633,7 +623,7 @@ export async function generateSubjectComment(
         당신은 초등학교 교사입니다. 학생의 교과별 평가 결과(수행평가)를 바탕으로 2026학년도 학교생활기록부 '교과학습발달상황'의 '성취수준 및 특기사항' 교사용 검토 초안을 작성해주세요.
 
         [학생 정보]
-        - 이름: ${studentName}
+        - 학생 식별: 이름을 제거한 가명 학생 1명
         - 교과: ${subject}
 
         [평가 데이터]
@@ -641,7 +631,7 @@ export async function generateSubjectComment(
 
         [작성 원칙 - **필수 준수**]
         1. **데이터 기반 작성:** 위 [평가 데이터]에 나열된 항목 중, 평가 결과가 '잘함', '보통', '노력요함'인 항목만을 근거로 작성하세요. '미실시'인 항목은 절대 언급하지 마세요.
-        2. **교과명/학생명 언급 금지:** 문장 내에서 교과명(${subject})이나 학생의 이름을 절대 포함하지 마세요. (예: "${subject} 시간에는" -> "수업 활동에서", "${studentName}은" -> 생략)
+        2. **교과명/학생명 언급 금지:** 문장 내에서 교과명(${subject})이나 학생의 이름을 포함하지 마세요. (예: "${subject} 시간에는" -> "수업 활동에서")
         3. **천편일률적인 시작 금지 (매우 중요):** 
            - **모든 학생의 문장이 똑같은 단어(예: 평가요소 명칭)로 시작해서는 안 됩니다.**
            - 이번 생성에서는 다음 스타일을 반드시 따르세요: **${randomStyle}**
@@ -658,7 +648,7 @@ export async function generateSubjectComment(
     `;
 
     try {
-        const response = await ai.models.generateContent({
+        const response = await generateGeminiContent({
             model: selectedModel,
             contents: { parts: [{ text: prompt }] },
             config: {
@@ -679,6 +669,6 @@ export async function generateSubjectComment(
         return json.comment?.trim() || "생성된 내용이 없습니다.";
     } catch (error) {
         console.error("Error generating subject comment:", error);
-        throw new Error("AI 생성 중 오류가 발생했습니다.");
+        throw error instanceof Error ? error : new Error("AI 생성 중 오류가 발생했습니다.");
     }
 }

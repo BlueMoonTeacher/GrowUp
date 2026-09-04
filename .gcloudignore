@@ -29,3 +29,6 @@ dist-ssr/
 # Antigravity / Cursor 로컬 설정
 .antigravity/
 .cursor/
+
+# 심의자료 원본·생성물은 웹앱 컨테이너에 포함하지 않음
+학습 지원심의자료 제작/

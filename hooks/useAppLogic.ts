@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { auth, firestore } from '../firebase';
+import firebase, { auth, firestore } from '../firebase';
 import { Student, BehaviorRecord } from '../types';
 import { extractStudentInfoFromFile } from '../services/geminiService';
 import { useModal } from '../context/ModalContext';
 import { AppSettings, SchoolYearEntry } from '../App';
 import { DEFAULT_GEMINI_MODEL, normalizeGeminiModel } from '../constants/geminiModels';
+import { deleteGeminiApiKey, getGeminiKeyStatus, saveGeminiApiKey } from '../services/secureGeminiApi';
 
 export type View = 'dashboard' | 'form' | 'notice';
 
@@ -43,7 +44,7 @@ export const useAppLogic = () => {
 
     const [settings, setSettings] = useState<AppSettings>({
         school: '', grade: '', class: '', schoolYear: '',
-        geminiApiKey: '', geminiModel: DEFAULT_GEMINI_MODEL
+        geminiApiKey: '', geminiKeyConfigured: false, geminiModel: DEFAULT_GEMINI_MODEL
     });
 
     /** 이 계정에 저장된 모든 학년도·학반 (학생 데이터 기준). 설정 모달에서 목록 표시용 */
@@ -92,8 +93,32 @@ export const useAppLogic = () => {
 
                     if (settingsDoc.exists) {
                         const loadedSettings = settingsDoc.data() as AppSettings;
+                        const legacyApiKey = loadedSettings.geminiApiKey?.trim() || '';
+                        let keyStatus: { configured: boolean; lastFour?: string } = {
+                            configured: Boolean(loadedSettings.geminiKeyConfigured),
+                            lastFour: loadedSettings.geminiKeyLastFour || '',
+                        };
+
+                        try {
+                            keyStatus = legacyApiKey
+                                ? await saveGeminiApiKey(legacyApiKey)
+                                : await getGeminiKeyStatus();
+
+                            if (legacyApiKey) {
+                                await settingsRef.set({
+                                    geminiApiKey: firebase.firestore.FieldValue.delete(),
+                                }, { merge: true });
+                            }
+                        } catch (error) {
+                            console.warn('Gemini API 키 보안 저장소 상태를 확인하지 못했습니다.', error);
+                        }
+
+                        const { geminiApiKey: _legacyApiKey, ...safeSettings } = loadedSettings;
                         newSettings = {
-                            ...loadedSettings,
+                            ...safeSettings,
+                            geminiApiKey: '',
+                            geminiKeyConfigured: keyStatus.configured,
+                            geminiKeyLastFour: keyStatus.lastFour || '',
                             schoolYear: loadedSettings.schoolYear || defaultSchoolYear,
                             geminiModel: normalizeGeminiModel(loadedSettings.geminiModel)
                         };
@@ -104,7 +129,19 @@ export const useAppLogic = () => {
                             newSettings.class = active.class;
                         }
                     } else {
-                        newSettings = { school: '', grade: '', class: '', schoolYear: defaultSchoolYear, geminiApiKey: '', geminiModel: DEFAULT_GEMINI_MODEL };
+                        let keyStatus: { configured: boolean; lastFour?: string } = { configured: false };
+                        try {
+                            keyStatus = await getGeminiKeyStatus();
+                        } catch (error) {
+                            console.warn('Gemini API 키 보안 저장소 상태를 확인하지 못했습니다.', error);
+                        }
+                        newSettings = {
+                            school: '', grade: '', class: '', schoolYear: defaultSchoolYear,
+                            geminiApiKey: '',
+                            geminiKeyConfigured: keyStatus.configured,
+                            geminiKeyLastFour: keyStatus.lastFour || '',
+                            geminiModel: DEFAULT_GEMINI_MODEL
+                        };
                     }
 
                     setSettings(newSettings);
@@ -131,7 +168,7 @@ export const useAppLogic = () => {
                 }
             } else {
                 setStudents([]);
-                setSettings({ school: '', grade: '', class: '', schoolYear: '', geminiApiKey: '', geminiModel: DEFAULT_GEMINI_MODEL });
+                setSettings({ school: '', grade: '', class: '', schoolYear: '', geminiApiKey: '', geminiKeyConfigured: false, geminiModel: DEFAULT_GEMINI_MODEL });
                 setIsInitialSetupRequired(false);
                 setIsDataLoading(false);
             }
@@ -404,24 +441,44 @@ export const useAppLogic = () => {
             return;
         }
         try {
-            newSettings.geminiModel = normalizeGeminiModel(newSettings.geminiModel);
-            const active = getActiveYearFromSettings(newSettings);
+            const apiKeyDraft = newSettings.geminiApiKey?.trim() || '';
+            let geminiKeyConfigured = settings.geminiKeyConfigured || false;
+            let geminiKeyLastFour = settings.geminiKeyLastFour || '';
+
+            if (apiKeyDraft) {
+                const keyStatus = await saveGeminiApiKey(apiKeyDraft);
+                geminiKeyConfigured = keyStatus.configured;
+                geminiKeyLastFour = keyStatus.lastFour || '';
+            }
+
+            const normalizedSettings: AppSettings = {
+                ...newSettings,
+                geminiApiKey: '',
+                geminiKeyConfigured,
+                geminiKeyLastFour,
+                geminiModel: normalizeGeminiModel(newSettings.geminiModel),
+            };
+            const active = getActiveYearFromSettings(normalizedSettings);
             if (active) {
-                newSettings.schoolYear = active.schoolYear;
-                newSettings.grade = active.grade;
-                newSettings.class = active.class;
+                normalizedSettings.schoolYear = active.schoolYear;
+                normalizedSettings.grade = active.grade;
+                normalizedSettings.class = active.class;
             }
 
             const settingsRef = firestore.collection('users').doc(user.uid).collection('appData').doc('settings');
-            await settingsRef.set(newSettings, { merge: true });
+            const { geminiApiKey: _apiKeyDraft, ...safeSettings } = normalizedSettings;
+            await settingsRef.set({
+                ...safeSettings,
+                geminiApiKey: firebase.firestore.FieldValue.delete(),
+            }, { merge: true });
 
-            setSettings(newSettings);
+            setSettings(normalizedSettings);
 
-            const activeClassChanged = newSettings.schoolYear !== settings.schoolYear
-                || newSettings.grade !== settings.grade
-                || newSettings.class !== settings.class;
+            const activeClassChanged = normalizedSettings.schoolYear !== settings.schoolYear
+                || normalizedSettings.grade !== settings.grade
+                || normalizedSettings.class !== settings.class;
             if (activeClassChanged) {
-                await fetchStudents(user.uid, newSettings.schoolYear || '', newSettings.grade, newSettings.class);
+                await fetchStudents(user.uid, normalizedSettings.schoolYear || '', normalizedSettings.grade, normalizedSettings.class);
                 setSelectedStudent(null);
                 setView('dashboard');
             }
@@ -432,7 +489,37 @@ export const useAppLogic = () => {
             setIsSettingsModalOpen(false);
         } catch (error) {
             console.error("Error saving settings to Firestore:", error);
-            await showAlert("설정 저장 중 오류가 발생했습니다.");
+            await showAlert(error instanceof Error ? error.message : "설정 저장 중 오류가 발생했습니다.");
+        }
+    };
+
+    const handleDeleteGeminiKey = async () => {
+        if (!user || !settings.geminiKeyConfigured) return;
+        const confirmed = await showConfirm(
+            '등록된 Gemini API 키를 삭제하시겠습니까? 삭제 후에는 새 키를 등록할 때까지 AI 기능을 사용할 수 없습니다.',
+            'Gemini API 키 삭제',
+            '삭제하기'
+        );
+        if (!confirmed) return;
+
+        try {
+            await deleteGeminiApiKey();
+            const settingsRef = firestore.collection('users').doc(user.uid).collection('appData').doc('settings');
+            await settingsRef.set({
+                geminiApiKey: firebase.firestore.FieldValue.delete(),
+                geminiKeyConfigured: false,
+                geminiKeyLastFour: firebase.firestore.FieldValue.delete(),
+            }, { merge: true });
+            setSettings(prev => ({
+                ...prev,
+                geminiApiKey: '',
+                geminiKeyConfigured: false,
+                geminiKeyLastFour: '',
+            }));
+            await showAlert('Gemini API 키가 삭제되었습니다.');
+        } catch (error) {
+            console.error('Gemini API 키 삭제 실패:', error);
+            await showAlert(error instanceof Error ? error.message : 'Gemini API 키를 삭제하지 못했습니다.');
         }
     };
 
@@ -455,7 +542,11 @@ export const useAppLogic = () => {
             };
 
             const settingsRef = firestore.collection('users').doc(user.uid).collection('appData').doc('settings');
-            await settingsRef.set(nextSettings, { merge: true });
+            const { geminiApiKey: _apiKeyDraft, ...safeNextSettings } = nextSettings;
+            await settingsRef.set({
+                ...safeNextSettings,
+                geminiApiKey: firebase.firestore.FieldValue.delete(),
+            }, { merge: true });
             await fetchStudents(user.uid, entry.schoolYear, entry.grade, entry.class);
 
             setSettings(nextSettings);
@@ -507,6 +598,7 @@ export const useAppLogic = () => {
         handleAddBehaviorRecord,
         handleDeleteBehaviorRecord,
         handleSaveSettings,
+        handleDeleteGeminiKey,
         handleSwitchClass,
         handleLogout,
         schoolYearsFromData

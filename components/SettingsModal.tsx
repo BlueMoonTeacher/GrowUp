@@ -8,7 +8,8 @@ interface SettingsModalProps {
   currentSettings: AppSettings;
   /** 이 계정 학생 데이터에서 추출한 학년도·학반 목록 (설정에 없어도 표시용으로 병합) */
   schoolYearsFromData?: { schoolYear: string; grade: string; class: string }[];
-  onSave: (settings: AppSettings) => void;
+  onSave: (settings: AppSettings) => void | Promise<void>;
+  onDeleteGeminiKey: () => Promise<void>;
   onClose: () => void;
   isInitialSetup?: boolean;
 }
@@ -40,7 +41,7 @@ const defaultSchoolYear = () => {
   return String(m >= 3 ? y : y - 1);
 };
 
-const SettingsModal = ({ currentSettings, schoolYearsFromData = [], onSave, onClose, isInitialSetup = false }: SettingsModalProps): React.ReactElement => {
+const SettingsModal = ({ currentSettings, schoolYearsFromData = [], onSave, onDeleteGeminiKey, onClose, isInitialSetup = false }: SettingsModalProps): React.ReactElement => {
   const [settings, setSettings] = useState<AppSettings>(() => {
     const entries = currentSettings.schoolYearEntries;
     if (entries?.length) return currentSettings;
@@ -59,6 +60,8 @@ const SettingsModal = ({ currentSettings, schoolYearsFromData = [], onSave, onCl
   const [searchResults, setSearchResults] = useState<School[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeletingKey, setIsDeletingKey] = useState(false);
 
   const entries = useMemo(() => settings.schoolYearEntries || [], [settings.schoolYearEntries]);
 
@@ -167,8 +170,30 @@ const SettingsModal = ({ currentSettings, schoolYearsFromData = [], onSave, onCl
     setEntries(next);
   };
 
-  const handleSave = () => {
-    onSave(settings);
+  const handleSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      await onSave(settings);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteKey = async () => {
+    if (isDeletingKey) return;
+    setIsDeletingKey(true);
+    try {
+      await onDeleteGeminiKey();
+      setSettings(prev => ({
+        ...prev,
+        geminiApiKey: '',
+        geminiKeyConfigured: false,
+        geminiKeyLastFour: '',
+      }));
+    } finally {
+      setIsDeletingKey(false);
+    }
   };
 
   const hasValidActive = entries.some(e => e.active && e.schoolYear && e.grade && e.class);
@@ -367,21 +392,65 @@ const SettingsModal = ({ currentSettings, schoolYearsFromData = [], onSave, onCl
                 <span className="text-lg" title="인증">🔑</span> Gemini AI 설정하기
               </h3>
               <div className="bg-base-50 p-4 rounded-lg border border-base-300 space-y-4">
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950" role="note">
+                  <p className="font-bold">학생자료 처리에는 유료 Gemini API 키 사용을 권장합니다.</p>
+                  <p className="mt-1">
+                    결제 수단이 연결된 Google Cloud 프로젝트에서 발급한 개인 키를 사용해 주세요.
+                    무료 서비스 키에는 학생 이름, 행동 기록, 성적, 건강정보 등 개인정보·민감정보를 전송하지 마세요.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 font-semibold">
+                    <a
+                      href="https://ai.google.dev/gemini-api/docs/billing"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-amber-900 underline underline-offset-2 hover:text-amber-700"
+                    >
+                      결제 설정 안내
+                    </a>
+                    <a
+                      href="https://ai.google.dev/gemini-api/terms"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-amber-900 underline underline-offset-2 hover:text-amber-700"
+                    >
+                      데이터 처리 약관
+                    </a>
+                  </div>
+                </div>
                 <div>
-                  <label className="block text-sm font-semibold text-base-content-secondary mb-2" htmlFor="geminiApiKey">
-                    Gemini API Key
-                  </label>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <label className="block text-sm font-semibold text-base-content-secondary" htmlFor="geminiApiKey">
+                      Gemini API Key
+                    </label>
+                    {settings.geminiKeyConfigured && (
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">
+                          암호화 등록됨{settings.geminiKeyLastFour ? ` · ••••${settings.geminiKeyLastFour}` : ''}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleDeleteKey}
+                          disabled={isDeletingKey}
+                          className="text-[10px] font-semibold text-error underline underline-offset-2 disabled:opacity-50"
+                        >
+                          {isDeletingKey ? '삭제 중…' : '키 삭제'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <input
                     id="geminiApiKey"
                     name="geminiApiKey"
                     type="password"
                     value={settings.geminiApiKey || ''}
                     onChange={handleChange}
-                    placeholder="개인 Gemini API Key 입력"
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder={settings.geminiKeyConfigured ? '새 키를 입력하면 기존 키가 교체됩니다' : '개인 Gemini API Key 입력'}
                     className="w-full p-2 border border-base-300 rounded-md focus:ring-primary focus:border-primary shadow-sm bg-white text-sm"
                   />
                   <p className="text-[10px] text-base-content-secondary mt-1 ml-1">
-                    * AI 기능은 이 키로 호출됩니다. Google AI Studio에서 발급한 키를 입력해 주세요.
+                    * 키는 서버에서 Cloud KMS로 암호화되며 Firestore에 평문으로 저장되지 않습니다.
                   </p>
                 </div>
                 <div>
@@ -420,10 +489,10 @@ const SettingsModal = ({ currentSettings, schoolYearsFromData = [], onSave, onCl
           <button
             type="button"
             onClick={handleSave}
-            disabled={isInitialSetup && !canSave}
+            disabled={isSaving || (isInitialSetup && !canSave)}
             className="bg-primary text-primary-content font-semibold py-2 px-6 rounded-lg shadow-md hover:bg-primary-focus transition-colors disabled:bg-base-300 disabled:cursor-not-allowed"
           >
-            저장하기 (Enter)
+            {isSaving ? '저장 중…' : '저장하기 (Enter)'}
           </button>
         </div>
       </div>

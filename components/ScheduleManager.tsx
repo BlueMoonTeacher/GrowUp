@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { firestore, auth, storage } from '../firebase';
 import { ScheduleEvent, ScheduleSettings, ScheduleCategoryDef, ChecklistItem, ChecklistType, ChecklistCompletion, ScheduleAttachment } from '../types';
 import { useModal } from '../context/ModalContext';
@@ -790,6 +790,8 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
     const [checklists, setChecklists] = useState<ChecklistItem[]>([]);
     const [checklistCompletions, setChecklistCompletions] = useState<ChecklistCompletion[]>([]);
     const [scheduleMainView, setScheduleMainView] = useState<'calendar' | 'checklistLog'>('calendar');
+    const [isMobileActionsOpen, setIsMobileActionsOpen] = useState(false);
+    const mobileActionsRef = useRef<HTMLDivElement>(null);
 
     // UI States
     const [isEventModalOpen, setIsEventModalOpen] = useState(false);
@@ -822,6 +824,26 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
 
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
+
+    useEffect(() => {
+        if (!isMobileActionsOpen) return;
+
+        const closeOnOutsideClick = (event: PointerEvent) => {
+            if (!mobileActionsRef.current?.contains(event.target as Node)) {
+                setIsMobileActionsOpen(false);
+            }
+        };
+        const closeOnEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') setIsMobileActionsOpen(false);
+        };
+
+        document.addEventListener('pointerdown', closeOnOutsideClick);
+        document.addEventListener('keydown', closeOnEscape);
+        return () => {
+            document.removeEventListener('pointerdown', closeOnOutsideClick);
+            document.removeEventListener('keydown', closeOnEscape);
+        };
+    }, [isMobileActionsOpen]);
 
     useEffect(() => {
         if (!imagePreview) return;
@@ -1473,8 +1495,116 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                             </button>
                         </div>
 
-                        {/* Right Group (Buttons) */}
-                        <div className="flex flex-wrap justify-end gap-1.5">
+                        {/* Mobile actions menu */}
+                        <div ref={mobileActionsRef} className="relative sm:hidden">
+                            <button
+                                type="button"
+                                onClick={() => setIsMobileActionsOpen(open => !open)}
+                                className={`flex items-center justify-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-bold shadow-sm transition-all ${isMobileActionsOpen
+                                    ? 'border-primary bg-primary text-primary-content'
+                                    : 'border-base-300 bg-white text-base-content-secondary hover:bg-base-50'
+                                    }`}
+                                aria-haspopup="menu"
+                                aria-expanded={isMobileActionsOpen}
+                                aria-controls="schedule-mobile-actions"
+                            >
+                                <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                    <path d="M3 5.75A.75.75 0 013.75 5h12.5a.75.75 0 010 1.5H3.75A.75.75 0 013 5.75zm0 4A.75.75 0 013.75 9h12.5a.75.75 0 010 1.5H3.75A.75.75 0 013 9.75zm0 4A.75.75 0 013.75 13h12.5a.75.75 0 010 1.5H3.75A.75.75 0 013 13.75z" />
+                                </svg>
+                                메뉴
+                                <svg className={`h-3.5 w-3.5 transition-transform ${isMobileActionsOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                                </svg>
+                            </button>
+
+                            {isMobileActionsOpen && (
+                                <div
+                                    id="schedule-mobile-actions"
+                                    role="menu"
+                                    className="absolute right-0 top-full z-40 mt-2 w-48 overflow-hidden rounded-xl border border-base-300 bg-white p-1.5 shadow-xl"
+                                >
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => {
+                                            setIsSettingsModalOpen(true);
+                                            setIsMobileActionsOpen(false);
+                                        }}
+                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-bold text-base-content-secondary hover:bg-base-100"
+                                    >
+                                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                            <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                                        </svg>
+                                        설정
+                                    </button>
+                                    <div className="my-1 border-t border-base-200" />
+                                    <button
+                                        type="button"
+                                        role="menuitemradio"
+                                        aria-checked={scheduleMainView === 'calendar'}
+                                        onClick={() => {
+                                            setScheduleMainView('calendar');
+                                            setIsMobileActionsOpen(false);
+                                        }}
+                                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-bold ${scheduleMainView === 'calendar'
+                                            ? 'bg-primary/10 text-primary'
+                                            : 'text-base-content-secondary hover:bg-base-100'
+                                            }`}
+                                    >
+                                        <span>캘린더</span>
+                                        {scheduleMainView === 'calendar' && <span aria-hidden="true">✓</span>}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="menuitemradio"
+                                        aria-checked={scheduleMainView === 'checklistLog'}
+                                        onClick={() => {
+                                            setScheduleMainView('checklistLog');
+                                            setIsMobileActionsOpen(false);
+                                        }}
+                                        className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-bold ${scheduleMainView === 'checklistLog'
+                                            ? 'bg-primary/10 text-primary'
+                                            : 'text-base-content-secondary hover:bg-base-100'
+                                            }`}
+                                    >
+                                        <span>완료 기록</span>
+                                        {scheduleMainView === 'checklistLog' && <span aria-hidden="true">✓</span>}
+                                    </button>
+                                    <div className="my-1 border-t border-base-200" />
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => {
+                                            setIsRecurringModalOpen(true);
+                                            setIsMobileActionsOpen(false);
+                                        }}
+                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-bold text-primary hover:bg-primary/5"
+                                    >
+                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                        </svg>
+                                        고정 일정
+                                    </button>
+                                    <button
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => {
+                                            openEventModal(getTodayString());
+                                            setIsMobileActionsOpen(false);
+                                        }}
+                                        className="mt-1 flex w-full items-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-left text-sm font-bold text-primary-content hover:bg-primary-focus"
+                                    >
+                                        <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                            <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                                        </svg>
+                                        일정 추가
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Tablet/Desktop actions */}
+                        <div className="hidden flex-wrap justify-end gap-1.5 sm:flex">
                         <button
                             onClick={() => setIsSettingsModalOpen(true)}
                             className="bg-white text-base-content-secondary px-2.5 py-1.5 rounded-lg font-bold border border-base-300 shadow-sm hover:bg-base-50 transition-all text-[11px] flex items-center justify-center gap-1 min-w-0"

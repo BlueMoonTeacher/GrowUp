@@ -1,7 +1,7 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import './utils/geminiProxyFetch';
+import './utils/legacyServiceWorkerCleanup';
 import App from './App';
 import { ModalProvider } from './context/ModalContext';
 

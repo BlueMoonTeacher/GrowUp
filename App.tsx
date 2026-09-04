@@ -25,7 +25,10 @@ export interface AppSettings {
   schoolYearEntries?: SchoolYearEntry[];
   atptOfcdcScCode?: string;
   sdSchulCode?: string;
+  /** 설정 화면에서만 사용하는 신규 키 입력값. Firestore에는 저장하지 않음. */
   geminiApiKey?: string;
+  geminiKeyConfigured?: boolean;
+  geminiKeyLastFour?: string;
   geminiModel?: string;
 }
 
@@ -61,6 +64,7 @@ const App = (): React.ReactElement => {
     handleAddBehaviorRecord,
     handleDeleteBehaviorRecord,
     handleSaveSettings,
+    handleDeleteGeminiKey,
     handleSwitchClass,
     handleLogout,
     schoolYearsFromData
@@ -180,6 +184,7 @@ const App = (): React.ReactElement => {
           currentSettings={settings}
           schoolYearsFromData={schoolYearsFromData}
           onSave={handleSaveSettings}
+          onDeleteGeminiKey={handleDeleteGeminiKey}
           onClose={() => setIsSettingsModalOpen(false)}
           isInitialSetup={isInitialSetupRequired}
         />

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import * as XLSX from 'xlsx';
+import writeXlsxFile, { SheetData } from 'write-excel-file/browser';
 import { BehaviorRecord, Student, AnalysisResult, BehaviorObservationType } from '../types';
 import AnalysisModal from './AnalysisModal';
 import BehaviorRecordHelperModal from './BehaviorRecordHelperModal';
@@ -123,30 +123,51 @@ const BehaviorLog = ({ student, onAddRecord, onDeleteRecord, onUpdateStudent, se
       showToast('예시 기록을 입력칸에 넣었습니다. 학생에게 맞게 수정해 주세요.');
   };
 
-  const handleDownloadXls = () => {
+  const handleDownloadXls = async () => {
       const records = [...(student.behaviorRecords || [])].sort((a, b) => {
           const dateA = a.date || '';
           const dateB = b.date || '';
           if (dateA !== dateB) return dateA.localeCompare(dateB);
           return a.timestamp - b.timestamp;
       });
-      const rows = [['날짜별', '시간별', '구분', '관찰 상황', '구체적 행동', '지도 및 후속 변화']].concat(
-          records.map((r) => [
-            r.date,
-            r.period,
-            resolveObservationType(r) === 'positive' ? '긍정' : resolveObservationType(r) === 'guidance' ? '지도 필요' : '중립',
-            r.context || '',
-            r.content,
-            r.followUp || ''
-          ])
-      );
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      const wb = XLSX.utils.book_new();
-      const sheetName = '행동발달누가기록';
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
-      const fileName = `${student.name?.hangul || '학생'}_행동발달누가기록.xlsx`;
-      XLSX.writeFile(wb, fileName);
-      showToast('엑셀 파일이 다운로드되었습니다.');
+      const headers = ['날짜별', '시간별', '구분', '관찰 상황', '구체적 행동', '지도 및 후속 변화'];
+      const rows: SheetData = [
+          headers.map(value => ({ value, fontWeight: 'bold', backgroundColor: '#E8F5E9' })),
+          ...records.map((record) => [
+              { value: record.date || '' },
+              { value: record.period || '' },
+              {
+                  value: resolveObservationType(record) === 'positive'
+                      ? '긍정'
+                      : resolveObservationType(record) === 'guidance'
+                          ? '지도 필요'
+                          : '중립'
+              },
+              { value: record.context || '', wrap: true },
+              { value: record.content || '', wrap: true },
+              { value: record.followUp || '', wrap: true },
+          ]),
+      ];
+      const safeStudentName = (student.name?.hangul || '학생').replace(/[\\/:*?"<>|]/g, '_');
+
+      try {
+          await writeXlsxFile(rows, {
+              sheet: '행동발달누가기록',
+              columns: [
+                  { width: 12 },
+                  { width: 14 },
+                  { width: 12 },
+                  { width: 28 },
+                  { width: 45 },
+                  { width: 35 },
+              ],
+              stickyRowsCount: 1,
+          }).toFile(`${safeStudentName}_행동발달누가기록.xlsx`);
+          showToast('엑셀 파일이 다운로드되었습니다.');
+      } catch (error) {
+          console.error('행동발달누가기록 엑셀 생성 실패:', error);
+          showToast('엑셀 파일을 만들지 못했습니다. 다시 시도해 주세요.');
+      }
   };
 
   // --- Edit Handlers ---

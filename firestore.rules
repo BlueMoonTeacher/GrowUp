@@ -1,0 +1,58 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isNoticeAdmin() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['kth9302@gmail.com'];
+    }
+
+    // 학생·평가·일정·설정 데이터는 계정 소유자만 접근할 수 있다.
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /{document=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // 공지사항은 로그인한 교사가 함께 읽는 전역 게시판이다.
+    // 작성·수정·삭제는 관리자 계정으로 제한한다.
+    match /notices/{noticeId} {
+      allow read: if isSignedIn();
+      allow create: if isNoticeAdmin()
+        && request.resource.data.authorUid == request.auth.uid;
+      allow update: if isNoticeAdmin()
+        && resource.data.authorUid == request.auth.uid
+        && request.resource.data.authorUid == resource.data.authorUid;
+      allow delete: if isNoticeAdmin();
+
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn()
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.noticeId == noticeId;
+        allow update: if isSignedIn()
+          && resource.data.authorUid == request.auth.uid
+          && request.resource.data.authorUid == resource.data.authorUid
+          && request.resource.data.noticeId == noticeId;
+        allow delete: if isNoticeAdmin()
+          || (isSignedIn() && resource.data.authorUid == request.auth.uid);
+      }
+    }
+
+    // 새 컬렉션을 추가할 때 명시적으로 권한을 설계하도록 기본 거부한다.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

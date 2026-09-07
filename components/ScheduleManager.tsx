@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { getHolidayPreset } from '@hyunbinseo/holidays-kr';
 import { firestore, auth, storage } from '../firebase';
 import { ScheduleEvent, ScheduleSettings, ScheduleCategoryDef, ChecklistItem, ChecklistType, ChecklistCompletion, ScheduleAttachment } from '../types';
 import { useModal } from '../context/ModalContext';
@@ -784,6 +785,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
     const [currentDate, setCurrentDate] = useState(new Date());
     const [events, setEvents] = useState<ScheduleEvent[]>([]);
     const [settings, setSettings] = useState<ScheduleSettings>(DEFAULT_SETTINGS);
+    const [holidayNamesByDate, setHolidayNamesByDate] = useState<Record<string, readonly string[]>>({});
     const [loading, setLoading] = useState(false);
 
     // Checklist State
@@ -1315,6 +1317,34 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
         return days;
     }, [year, month]);
 
+    useEffect(() => {
+        let isActive = true;
+        const calendarYears = Array.from(new Set(calendarDays.map(cell => String(cell.dateObj.getFullYear()))));
+
+        const loadHolidays = async () => {
+            const presets = await Promise.all(calendarYears.map(async calendarYear => {
+                try {
+                    return await getHolidayPreset(calendarYear);
+                } catch (error) {
+                    // The package only publishes years confirmed by the official calendar notice.
+                    if (!(error instanceof RangeError)) {
+                        console.error(`Error loading Korean holidays for ${calendarYear}:`, error);
+                    }
+                    return {};
+                }
+            }));
+
+            if (isActive) {
+                setHolidayNamesByDate(Object.assign({}, ...presets));
+            }
+        };
+
+        loadHolidays();
+        return () => {
+            isActive = false;
+        };
+    }, [calendarDays]);
+
     const getCategoryColor = (catLabel: string) => {
         const cat = settings.categories.find(c => c.label === catLabel);
         return cat?.colorClass || 'bg-gray-100 text-gray-800 border-gray-200';
@@ -1777,6 +1807,8 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                             const dayOfWeek = cell.dateObj.getDay();
                             const isSunday = dayOfWeek === 0;
                             const isSaturday = dayOfWeek === 6;
+                            const holidayNames = holidayNamesByDate[dateStr] || [];
+                            const isHoliday = holidayNames.length > 0;
 
                             dayEvents.sort((a, b) => {
                                 if (a.isCompleted !== b.isCompleted) return a.isCompleted ? 1 : -1;
@@ -1792,14 +1824,24 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                         ${isToday ? 'ring-2 ring-primary ring-inset z-20' : ''}
                                     `}
                                 >
-                                    <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full mb-1
-                                        ${isToday
-                                            ? 'bg-primary text-primary-content font-extrabold'
-                                            : `${!cell.isCurrentMonth ? 'opacity-40' : ''} ${isSunday ? 'text-red-500' : isSaturday ? 'text-blue-500' : 'text-base-content-secondary'}`
-                                        }
-                                    `}>
-                                        {cell.day}
-                                    </span>
+                                    <div className="mb-1 flex min-w-0 items-start gap-1">
+                                        <span className={`text-xs font-bold w-6 h-6 shrink-0 flex items-center justify-center rounded-full
+                                            ${isToday
+                                                ? 'bg-primary text-primary-content font-extrabold'
+                                                : `${!cell.isCurrentMonth ? 'opacity-40' : ''} ${isHoliday || isSunday ? 'text-red-500' : isSaturday ? 'text-blue-500' : 'text-base-content-secondary'}`
+                                            }
+                                        `}>
+                                            {cell.day}
+                                        </span>
+                                        {isHoliday && (
+                                            <span
+                                                className={`min-w-0 flex-1 truncate pt-0.5 text-[9px] font-bold leading-tight text-red-500 ${!cell.isCurrentMonth ? 'opacity-40' : ''}`}
+                                                title={holidayNames.join(', ')}
+                                            >
+                                                {holidayNames.join(' · ')}
+                                            </span>
+                                        )}
+                                    </div>
 
                                     {dayEvents.map(event => (
                                         <div

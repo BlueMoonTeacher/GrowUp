@@ -4,7 +4,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { KeyManagementServiceClient } from '@google-cloud/kms';
 import { GoogleGenAI } from '@google/genai';
-import { generateWithModelFallback, classifyGeminiError, isValidGeminiKeyInput } from './services/geminiGateway.mjs';
+import { generateWithModelFallback, classifyGeminiError, isValidGeminiKeyInput, getGeminiQuotaDetails } from './services/geminiGateway.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -208,7 +208,7 @@ app.post(
       return res.json({ text: response.text });
     } catch (error) {
       // Never log upstream messages: they may contain credentials or user content.
-      console.error(JSON.stringify({ event: 'gemini-failure', phase, model, status: Number(error?.status || error?.code || 0) }));
+      console.error(JSON.stringify({ event: 'gemini-failure', phase, model, status: Number(error?.status || error?.code || 0), quota: getGeminiQuotaDetails(error) }));
       return sendApiError(res, ...classifyGeminiError(error, phase));
     } finally {
       plaintextKey = '';

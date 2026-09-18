@@ -1,6 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateWithModelFallback, classifyGeminiError, isValidGeminiKeyInput } from './geminiGateway.mjs';
+import { generateWithModelFallback, classifyGeminiError, isValidGeminiKeyInput, getGeminiQuotaDetails } from './geminiGateway.mjs';
+
+test('distinguishes zero allocation and retains only safe quota metadata', () => {
+  const error = { status: 429, message: JSON.stringify({ error: { message: 'private content', details: [{
+    '@type': 'type.googleapis.com/google.rpc.QuotaFailure', violations: [{ quotaMetric: 'generativelanguage.googleapis.com/generate_content_free_tier_requests', quotaValue: '0', quotaDimensions: { private: 'do not log' } }]
+  }] } }) };
+  assert.deepEqual(getGeminiQuotaDetails(error), { metrics: ['generativelanguage.googleapis.com/generate_content_free_tier_requests'], zeroLimit: true });
+  assert.equal(classifyGeminiError(error, 'generate')[1], 'gemini-quota-unavailable');
+  assert.deepEqual(getGeminiQuotaDetails({ message: 'not JSON' }), { metrics: [], zeroLimit: false });
+});
 
 test('accepts new auth keys, legacy keys and longer opaque credentials', () => {
   for (const key of ['AQ.' + 'x'.repeat(50), 'AIza' + 'x'.repeat(35), 'AQ.' + 'x'.repeat(500)]) {

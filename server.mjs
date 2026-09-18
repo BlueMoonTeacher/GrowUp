@@ -145,8 +145,10 @@ app.post('/api/gemini-key', requireFirebaseUser, requireKmsConfiguration, parseK
     return sendApiError(res, 400, 'invalid-api-key', '올바른 형식의 Gemini API 키를 입력해 주세요.');
   }
 
+  let phase = 'encrypt';
   try {
     const ciphertext = await encryptApiKey(apiKey);
+    phase = 'store';
     await db.collection(credentialCollection).doc(req.firebaseUser.uid).set({
       ciphertext,
       lastFour: apiKey.slice(-4),
@@ -154,8 +156,13 @@ app.post('/api/gemini-key', requireFirebaseUser, requireKmsConfiguration, parseK
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
     return res.json({ configured: true, lastFour: apiKey.slice(-4) });
-  } catch {
-    return sendApiError(res, 500, 'key-save-failed', 'API 키를 암호화하여 저장하지 못했습니다.');
+  } catch (error) {
+    // Log only stage/status, never the key or the upstream error body.
+    console.error(JSON.stringify({ event: 'gemini-key-save-failure', phase, status: Number(error?.code || error?.status || 0) }));
+    return sendApiError(res, 503, phase === 'encrypt' ? 'key-encryption-failed' : 'key-storage-failed',
+      phase === 'encrypt'
+        ? '서버의 API 키 암호화 서비스에 연결하지 못했습니다. 관리자에게 문의해 주세요.'
+        : '암호화된 API 키를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.');
   }
 });
 

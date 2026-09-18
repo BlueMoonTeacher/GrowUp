@@ -31,3 +31,19 @@ Gemini 기능은 로그인 후 설정 화면에 등록한 교사 개인 API 키�
 - Cloud Run 운영 프로젝트: `gen-lang-client-0151365128` (`https://v1-01-30846565412.us-west1.run.app`)
 - Firebase Auth·Firestore·Storage 프로젝트: `forstudents-e1117`
 - 배포: `./deploy.ps1` 또는 `gcloud builds submit --config cloudbuild.yaml --project gen-lang-client-0151365128 .`
+
+### 개인 API 키 저장에 필요한 Cloud KMS 설정
+
+KMS 키가 있는 Firebase 프로젝트뿐 아니라 **호출하는 Cloud Run 프로젝트**에서도
+Cloud KMS API가 활성화되어 있어야 합니다. 런타임 계정에 암호화 권한이 있어도
+호출 프로젝트의 API가 비활성화되어 있으면 키 저장과 AI 호출이 실패합니다.
+
+```sh
+gcloud services enable cloudkms.googleapis.com --project=gen-lang-client-0151365128
+gcloud services enable cloudkms.googleapis.com --project=forstudents-e1117
+```
+
+런타임 계정은 `cloudrun.service.yaml`에 지정하며, Firebase 프로젝트의
+`roles/datastore.user`와 해당 KMS 키의 `roles/cloudkms.cryptoKeyEncrypterDecrypter`가 필요합니다.
+키 저장 실패 로그는 `gemini-key-save-failure`의 `phase` (`encrypt` / `store`)와
+상태 코드만 기록합니다. 실제 키나 요청 본문은 기록하지 않습니다.

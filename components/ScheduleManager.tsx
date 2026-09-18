@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { getHolidayPreset } from '@hyunbinseo/holidays-kr';
 import { firestore, auth, storage } from '../firebase';
 import { ScheduleEvent, ScheduleSettings, ScheduleCategoryDef, ChecklistItem, ChecklistType, ChecklistCompletion, ScheduleAttachment } from '../types';
@@ -1129,12 +1130,14 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
     };
 
     const analyzeScheduleCapture = async (file: File) => {
+        if (isAnalyzingCapture) return;
         if (!file.type.startsWith('image/')) {
             await showAlert('이미지 캡처만 분석할 수 있습니다.');
             return;
         }
         setIsAnalyzingCapture(true);
         setCaptureMessage('');
+        setScheduleDrafts([]);
         try {
             const drafts = await extractScheduleEventsFromImage(
                 file,
@@ -1150,7 +1153,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
             }
             applyScheduleDraft(drafts[0]);
         } catch (error: any) {
-            await showAlert(error.message || '캡처 분석 중 오류가 발생했습니다.');
+            setCaptureMessage(error.message || '캡처 분석 중 오류가 발생했습니다.');
         } finally {
             setIsAnalyzingCapture(false);
         }
@@ -1988,11 +1991,14 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
             </div>
 
             {/* Modals ... */}
-            {isEventModalOpen && (
+            {isEventModalOpen && createPortal(
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-2 backdrop-blur-sm sm:p-4" onClick={closeEventModal}>
                     {/* ... (Existing Modal Content) ... */}
                     <div
-                        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-base-300 bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={editingId ? '일정 수정' : '새 일정 등록'}
+                        className="schedule-event-dialog flex min-h-0 max-h-[calc(100dvh-1rem)] w-full min-w-0 max-w-2xl flex-col overflow-hidden rounded-xl border border-base-300 bg-white shadow-2xl sm:max-h-[calc(100dvh-2rem)]"
                         onClick={e => e.stopPropagation()}
                         onPaste={handleScheduleCapturePaste}
                         onKeyDown={handleEventModalKeyDown}
@@ -2019,9 +2025,9 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                     >
                                         <div className="flex items-center justify-between gap-3">
                                             <div className="min-w-0">
-                                                <p className="text-sm font-bold text-base-content">캡처 이미지 붙여넣기</p>
+                                                <p className="text-sm font-bold text-base-content">AI로 일정 입력</p>
                                                 <p className="text-xs leading-snug text-base-content-secondary">
-                                                    윈도우 캡처 후 이 창에서 붙여넣으면 일정 후보를 분석합니다.
+                                                    이미지를 선택하거나 이 영역에 붙여넣으면 일정 후보를 분석합니다. 메모에 붙여넣으면 첨부만 됩니다.
                                                 </p>
                                             </div>
                                             {isAnalyzingCapture && (
@@ -2031,8 +2037,16 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                                 </svg>
                                             )}
                                         </div>
+                                        <label className="mt-2 inline-flex cursor-pointer rounded-lg border border-primary/30 bg-white px-3 py-2 text-sm font-bold text-primary">
+                                            {isAnalyzingCapture ? '분석 중…' : '이미지 선택하여 분석'}
+                                            <input type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" className="sr-only" disabled={isAnalyzingCapture} onChange={event => {
+                                                const file = event.target.files?.[0];
+                                                event.target.value = '';
+                                                if (file) void analyzeScheduleCapture(file);
+                                            }} />
+                                        </label>
                                         {captureMessage && (
-                                            <p className="mt-2 rounded-lg bg-white/70 px-3 py-2 text-xs font-semibold text-base-content-secondary">
+                                            <p role="status" className="mt-2 break-words rounded-lg bg-white/70 px-3 py-2 text-xs font-semibold text-base-content-secondary">
                                                 {captureMessage}
                                             </p>
                                         )}
@@ -2293,7 +2307,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                                 </div>
                             </div>
                     </div>
-                </div>
+                </div>, document.body
             )}
 
             {imagePreview && (

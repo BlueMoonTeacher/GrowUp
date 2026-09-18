@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AppSettings, SchoolYearEntry } from '../App';
 import { searchSchool, School } from '../services/neisService';
 import { DEFAULT_GEMINI_MODEL, GEMINI_MODELS } from '../constants/geminiModels';
+import { generateGeminiContent } from '../services/secureGeminiApi';
 
 interface SettingsModalProps {
   currentSettings: AppSettings;
@@ -62,6 +63,8 @@ const SettingsModal = ({ currentSettings, schoolYearsFromData = [], onSave, onDe
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeletingKey, setIsDeletingKey] = useState(false);
+  const [isTestingAi, setIsTestingAi] = useState(false);
+  const [aiTestMessage, setAiTestMessage] = useState('');
 
   const entries = useMemo(() => settings.schoolYearEntries || [], [settings.schoolYearEntries]);
 
@@ -470,6 +473,22 @@ const SettingsModal = ({ currentSettings, schoolYearsFromData = [], onSave, onDe
                       </option>
                     ))}
                   </select>
+                  <button type="button" disabled={isTestingAi || !currentSettings.geminiKeyConfigured || Boolean(settings.geminiApiKey?.trim())}
+                    className="mt-3 rounded-md border border-primary px-3 py-2 text-sm font-bold text-primary disabled:opacity-40"
+                    onClick={async () => {
+                      setIsTestingAi(true);
+                      setAiTestMessage('');
+                      try {
+                        await generateGeminiContent({ model: settings.geminiModel || DEFAULT_GEMINI_MODEL, contents: { parts: [{ text: 'Reply with OK.' }] } });
+                        setAiTestMessage('연결 성공: 저장된 API 키로 AI 응답을 받았습니다.');
+                      } catch (error) {
+                        setAiTestMessage(error instanceof Error ? error.message : 'AI 연결을 확인하지 못했습니다.');
+                      } finally { setIsTestingAi(false); }
+                    }}>
+                    {isTestingAi ? '연결 확인 중…' : '저장된 키로 AI 연결 확인'}
+                  </button>
+                  <p className="mt-1 text-xs text-base-content-secondary">새 키는 설정을 저장한 뒤 연결을 확인해 주세요. 확인 시 소량의 API 사용량이 발생합니다.</p>
+                  {aiTestMessage && <p role="status" className="mt-2 text-sm break-words">{aiTestMessage}</p>}
                 </div>
               </div>
             </div>

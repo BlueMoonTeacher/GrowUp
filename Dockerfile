@@ -20,6 +20,7 @@ RUN npm ci --omit=dev --no-audit --no-fund
 
 COPY --from=build /app/dist ./dist
 COPY server.mjs ./server.mjs
+COPY services/geminiGateway.mjs ./services/geminiGateway.mjs
 
 USER node
 

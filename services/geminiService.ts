@@ -19,9 +19,11 @@ export interface ExtractedScheduleDraft {
 
 // Helper to convert a File object to a GoogleGenAI.Part object.
 async function fileToGenerativePart(file: File) {
-    const base64EncodedDataPromise = new Promise<string>((resolve) => {
+    const base64EncodedDataPromise = new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = () => reject(new Error('파일을 읽지 못했습니다. 다시 선택해 주세요.'));
+        reader.onabort = () => reject(new Error('파일 읽기가 취소되었습니다.'));
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
         reader.readAsDataURL(file);
     });
     return {
@@ -505,6 +507,12 @@ export async function extractScheduleEventsFromImage(
     _apiKey?: string,
     model?: string
 ): Promise<ExtractedScheduleDraft[]> {
+    if (!['image/png', 'image/jpeg', 'image/webp', 'image/heic', 'image/heif'].includes(file.type)) {
+        throw new Error('PNG, JPEG, WebP, HEIC 또는 HEIF 이미지를 선택해 주세요.');
+    }
+    if (file.size > 12 * 1024 * 1024) {
+        throw new Error('분석 이미지는 12MB 이하여야 합니다. 이미지 크기를 줄여 주세요.');
+    }
     const selectedModel = normalizeGeminiModel(model);
     const imagePart = await fileToGenerativePart(file);
     const availableCategories = categories.length ? categories : ['업무'];
@@ -545,7 +553,8 @@ export async function extractScheduleEventsFromImage(
             },
         });
 
-        const parsed = JSON.parse(response.text || '[]');
+        if (!response.text?.trim()) throw new Error('AI 분석 결과가 비어 있습니다. 다시 시도해 주세요.');
+        const parsed = JSON.parse(response.text);
         const rows = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
         return rows
             .map((row: Partial<ExtractedScheduleDraft>) => {

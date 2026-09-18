@@ -374,6 +374,25 @@
           font-weight: 400;
         }
       }
+      /* Safari date/time controls have an intrinsic width larger than a grid cell. */
+      .schedule-event-dialog input,
+      .schedule-event-dialog textarea {
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+      }
+      .schedule-event-dialog input[type="date"],
+      .schedule-event-dialog input[type="time"] {
+        display: block;
+        width: 100%;
+        appearance: none;
+        -webkit-appearance: none;
+      }
+      .schedule-event-dialog input::-webkit-date-and-time-value {
+        min-width: 0;
+        text-align: left;
+      }
+      .schedule-event-dialog .grid > div { min-width: 0; }
     </style>
   </head>
   <body>

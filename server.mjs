@@ -4,6 +4,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { KeyManagementServiceClient } from '@google-cloud/kms';
 import { GoogleGenAI } from '@google/genai';
+import { generateWithModelFallback, classifyGeminiError } from './services/geminiGateway.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -183,6 +184,7 @@ app.post(
     }
 
     let plaintextKey = '';
+    let phase = 'credentials';
     try {
       const snapshot = await db.collection(credentialCollection).doc(req.firebaseUser.uid).get();
       if (!snapshot.exists || !snapshot.data()?.ciphertext) {
@@ -191,17 +193,16 @@ app.post(
 
       plaintextKey = await decryptApiKey(snapshot.data().ciphertext);
       const ai = new GoogleGenAI({ apiKey: plaintextKey });
-      const response = await ai.models.generateContent({ model, contents, config });
-      return res.json({ text: response.text || '' });
+      phase = 'generate';
+      const response = await generateWithModelFallback(ai, { model, contents, config }, supportedModels);
+      if (!response.text?.trim()) {
+        return sendApiError(res, 422, 'gemini-empty-response', 'AI가 분석 결과를 반환하지 않았습니다. 이미지 내용을 확인하고 다시 시도해 주세요.');
+      }
+      return res.json({ text: response.text });
     } catch (error) {
-      const upstreamStatus = Number(error?.status || error?.code || 0);
-      if (upstreamStatus === 400 || upstreamStatus === 401 || upstreamStatus === 403) {
-        return sendApiError(res, 400, 'gemini-key-rejected', 'Gemini API 키 또는 결제 프로젝트 설정을 확인해 주세요.');
-      }
-      if (upstreamStatus === 429) {
-        return sendApiError(res, 429, 'gemini-quota-exceeded', 'Gemini 사용량 한도에 도달했습니다. 잠시 후 다시 시도해 주세요.');
-      }
-      return sendApiError(res, 502, 'gemini-request-failed', 'Gemini 요청을 처리하지 못했습니다.');
+      // Never log upstream messages: they may contain credentials or user content.
+      console.error(JSON.stringify({ event: 'gemini-failure', phase, model, status: Number(error?.status || error?.code || 0) }));
+      return sendApiError(res, ...classifyGeminiError(error, phase));
     } finally {
       plaintextKey = '';
     }

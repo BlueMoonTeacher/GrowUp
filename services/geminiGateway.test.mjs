@@ -1,6 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateWithModelFallback, classifyGeminiError } from './geminiGateway.mjs';
+import { generateWithModelFallback, classifyGeminiError, isValidGeminiKeyInput } from './geminiGateway.mjs';
+
+test('accepts new auth keys, legacy keys and longer opaque credentials', () => {
+  for (const key of ['AQ.' + 'x'.repeat(50), 'AIza' + 'x'.repeat(35), 'AQ.' + 'x'.repeat(500)]) {
+    assert.equal(isValidGeminiKeyInput(key), true);
+  }
+});
+
+test('rejects empty, malformed and oversized key inputs', () => {
+  for (const key of ['', 'AQ.short', null, 123, 'x'.repeat(2049), 'AQ.' + 'x'.repeat(30) + '\n', 'AQ.' + 'x'.repeat(30) + ' space', 'AQ.' + 'x'.repeat(30) + '\u0000']) {
+    assert.equal(isValidGeminiKeyInput(key), false);
+  }
+});
 
 test('missing model retries with an available approved model and preserves the image/schema', async () => {
   const calls = [];

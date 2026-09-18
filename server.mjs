@@ -4,7 +4,7 @@ import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { KeyManagementServiceClient } from '@google-cloud/kms';
 import { GoogleGenAI } from '@google/genai';
-import { generateWithModelFallback, classifyGeminiError } from './services/geminiGateway.mjs';
+import { generateWithModelFallback, classifyGeminiError, isValidGeminiKeyInput } from './services/geminiGateway.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -141,7 +141,7 @@ app.get('/api/gemini-key', requireFirebaseUser, requireKmsConfiguration, async (
 
 app.post('/api/gemini-key', requireFirebaseUser, requireKmsConfiguration, parseKeyRequest, async (req, res) => {
   const apiKey = typeof req.body?.apiKey === 'string' ? req.body.apiKey.trim() : '';
-  if (!/^AIza[0-9A-Za-z_-]{20,}$/.test(apiKey) || apiKey.length > 200) {
+  if (!isValidGeminiKeyInput(apiKey)) {
     return sendApiError(res, 400, 'invalid-api-key', '올바른 형식의 Gemini API 키를 입력해 주세요.');
   }
 

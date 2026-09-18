@@ -1,3 +1,9 @@
+// Credentials are opaque: Google can change their prefix and encoded length.
+// This checks safe transport only; Gemini remains responsible for authentication.
+export function isValidGeminiKeyInput(value) {
+  return typeof value === 'string' && /^[\x21-\x7e]{20,2048}$/.test(value);
+}
+
 export async function generateWithModelFallback(ai, request, supportedModels) {
   try {
     return await ai.models.generateContent(request);

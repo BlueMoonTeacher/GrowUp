@@ -94,6 +94,12 @@ interface ScheduleImagePreview {
 }
 
 const DAILY_RANK_VISIBLE_KEY = 'growup-daily-checklist-show-rank';
+/** 터치에서는 길게 눌러야 끌기가 시작되어 목록 스크롤과 구분된다. */
+const CHECKLIST_TOUCH_DRAG_DELAY_MS = 280;
+const CHECKLIST_MOUSE_DRAG_THRESHOLD_PX = 4;
+const CHECKLIST_TOUCH_CANCEL_THRESHOLD_PX = 8;
+const CALENDAR_WHEEL_THRESHOLD = 40;
+const CALENDAR_WHEEL_COOLDOWN_MS = 450;
 
 const sortDailyChecklistItems = (list: ChecklistItem[]): ChecklistItem[] => {
     return [...list].sort((a, b) => {
@@ -180,6 +186,114 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
         dailyOrdering.onReorder(full.map(i => i.id));
     }, [sortedItems, dailyOrdering]);
 
+    const listRef = useRef<HTMLDivElement>(null);
+    const pointerDragRef = useRef<{
+        pointerId: number;
+        pointerType: string;
+        from: number;
+        over: number;
+        startX: number;
+        startY: number;
+        active: boolean;
+        timer: number | null;
+        row: HTMLElement;
+    } | null>(null);
+
+    const resetPointerDrag = useCallback(() => {
+        const state = pointerDragRef.current;
+        if (state?.timer) window.clearTimeout(state.timer);
+        pointerDragRef.current = null;
+        setDragIndex(null);
+        setDragOverIndex(null);
+    }, []);
+
+    useEffect(() => () => {
+        const state = pointerDragRef.current;
+        if (state?.timer) window.clearTimeout(state.timer);
+    }, []);
+
+    useEffect(() => {
+        const list = listRef.current;
+        if (!list || !enableDailyOrder) return;
+        const blockScrollWhileDragging = (e: TouchEvent) => {
+            if (pointerDragRef.current?.active) e.preventDefault();
+        };
+        list.addEventListener('touchmove', blockScrollWhileDragging, { passive: false });
+        return () => list.removeEventListener('touchmove', blockScrollWhileDragging);
+    }, [enableDailyOrder]);
+
+    const activatePointerDrag = () => {
+        const state = pointerDragRef.current;
+        if (!state || state.active) return;
+        state.active = true;
+        state.timer = null;
+        try { state.row.setPointerCapture(state.pointerId); } catch { /* ignore */ }
+        if (state.pointerType !== 'mouse') navigator.vibrate?.(15);
+        setDragIndex(state.from);
+        setDragOverIndex(state.from);
+    };
+
+    const getIndexAtPoint = (x: number, y: number): number | null => {
+        const row = document.elementFromPoint(x, y)?.closest<HTMLElement>('[data-checklist-index]');
+        if (!row || !listRef.current?.contains(row)) return null;
+        const index = Number(row.dataset.checklistIndex);
+        return Number.isNaN(index) ? null : index;
+    };
+
+    const handleRowPointerDown = (e: React.PointerEvent<HTMLDivElement>, index: number) => {
+        if (!enableDailyOrder || e.button !== 0) return;
+        if ((e.target as HTMLElement).closest('button, input, a')) return;
+        resetPointerDrag();
+        pointerDragRef.current = {
+            pointerId: e.pointerId,
+            pointerType: e.pointerType,
+            from: index,
+            over: index,
+            startX: e.clientX,
+            startY: e.clientY,
+            active: false,
+            timer: e.pointerType === 'mouse' ? null : window.setTimeout(activatePointerDrag, CHECKLIST_TOUCH_DRAG_DELAY_MS),
+            row: e.currentTarget,
+        };
+    };
+
+    const handleRowPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        const state = pointerDragRef.current;
+        if (!state || state.pointerId !== e.pointerId) return;
+        if (!state.active) {
+            const distance = Math.hypot(e.clientX - state.startX, e.clientY - state.startY);
+            if (state.pointerType === 'mouse') {
+                if (distance > CHECKLIST_MOUSE_DRAG_THRESHOLD_PX) activatePointerDrag();
+            } else if (distance > CHECKLIST_TOUCH_CANCEL_THRESHOLD_PX) {
+                resetPointerDrag();
+            }
+            if (!pointerDragRef.current?.active) return;
+        }
+        e.preventDefault();
+
+        const list = listRef.current;
+        if (list) {
+            const rect = list.getBoundingClientRect();
+            const edge = 28;
+            if (e.clientY < rect.top + edge) list.scrollTop -= 8;
+            else if (e.clientY > rect.bottom - edge) list.scrollTop += 8;
+        }
+
+        const over = getIndexAtPoint(e.clientX, e.clientY);
+        if (over !== null && over !== state.over) {
+            state.over = over;
+            setDragOverIndex(over);
+        }
+    };
+
+    const handleRowPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+        const state = pointerDragRef.current;
+        if (!state || state.pointerId !== e.pointerId) return;
+        const { active, from, over } = state;
+        resetPointerDrag();
+        if (active) applyReorder(from, over);
+    };
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (newItemText.trim()) {
@@ -243,7 +357,7 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
             </div>
 
             {/* Items List - Dynamic Height */}
-            <div className={`schedule-checklist-list min-h-[15rem] overflow-y-auto custom-scrollbar transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[800px]' : 'max-h-[19rem]'} space-y-1 mb-3 pr-0.5`}>
+            <div ref={listRef} className={`schedule-checklist-list min-h-[15rem] overflow-y-auto custom-scrollbar transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[800px]' : 'max-h-[19rem]'} space-y-1 mb-3 pr-0.5`}>
                 {currentItems.length > 0 ? (
                     currentItems.map(item => {
                         const globalIndex = sortedItems.findIndex(x => x.id === item.id);
@@ -252,28 +366,17 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
                         return (
                             <div
                                 key={item.id}
-                                onDragOver={e => {
-                                    if (!enableDailyOrder || dragIndex === null) return;
-                                    e.preventDefault();
-                                    e.dataTransfer.dropEffect = 'move';
-                                    setDragOverIndex(globalIndex);
-                                }}
-                                onDrop={e => {
-                                    e.preventDefault();
-                                    if (!enableDailyOrder) return;
-                                    const raw = e.dataTransfer.getData('text/plain');
-                                    let from: number | null = dragIndex;
-                                    if (raw !== '') {
-                                        const parsed = parseInt(raw, 10);
-                                        if (!Number.isNaN(parsed)) from = parsed;
-                                    }
-                                    setDragOverIndex(null);
-                                    setDragIndex(null);
-                                    if (from === null) return;
-                                    applyReorder(from, globalIndex);
-                                }}
+                                data-checklist-index={enableDailyOrder ? globalIndex : undefined}
+                                onPointerDown={e => handleRowPointerDown(e, globalIndex)}
+                                onPointerMove={handleRowPointerMove}
+                                onPointerUp={handleRowPointerUp}
+                                onPointerCancel={resetPointerDrag}
+                                onContextMenu={e => { if (pointerDragRef.current && pointerDragRef.current.pointerType !== 'mouse') e.preventDefault(); }}
+                                title={enableDailyOrder ? '끌어서 순서 변경 (터치: 길게 누른 뒤 끌기)' : undefined}
+                                style={enableDailyOrder ? { WebkitTouchCallout: 'none' } : undefined}
                                 className={`group flex items-center gap-1.5 text-sm animate-[fadeIn_0.2s_ease-out] p-1.5 rounded-lg hover:bg-white/80 hover:shadow-sm transition-all
-                                    ${isDragging ? 'opacity-50' : ''}
+                                    ${enableDailyOrder ? 'select-none cursor-grab active:cursor-grabbing' : ''}
+                                    ${isDragging ? 'opacity-60 bg-white shadow-md ring-1 ring-red-200' : ''}
                                     ${isOver && dragIndex !== globalIndex ? 'ring-1 ring-red-300/80 bg-white/90' : ''}
                                 `}
                             >
@@ -293,32 +396,6 @@ const ChecklistSection = ({ title, dateLabel, type, items, onAdd, onComplete, on
                                 <span className="min-w-0 flex-1 break-words leading-tight text-gray-700 font-medium">
                                     {item.content}
                                 </span>
-                                {enableDailyOrder && (
-                                    <span
-                                        draggable
-                                        onDragStart={e => {
-                                            setDragIndex(globalIndex);
-                                            e.dataTransfer.effectAllowed = 'move';
-                                            e.dataTransfer.setData('text/plain', String(globalIndex));
-                                        }}
-                                        onDragEnd={() => {
-                                            setDragIndex(null);
-                                            setDragOverIndex(null);
-                                        }}
-                                        className="shrink-0 cursor-grab touch-none select-none text-gray-400 hover:text-gray-600 active:cursor-grabbing"
-                                        title="드래그하여 순서 변경"
-                                        aria-label="순서 바꾸기(드래그)"
-                                    >
-                                        <svg className="h-5 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                                            <circle cx="9" cy="8" r="1.35" />
-                                            <circle cx="15" cy="8" r="1.35" />
-                                            <circle cx="9" cy="12" r="1.35" />
-                                            <circle cx="15" cy="12" r="1.35" />
-                                            <circle cx="9" cy="16" r="1.35" />
-                                            <circle cx="15" cy="16" r="1.35" />
-                                        </svg>
-                                    </span>
-                                )}
                                 <button
                                     type="button"
                                     onClick={() => onDelete(item.id)}
@@ -1272,6 +1349,55 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
     const handleNextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
     const goToToday = () => setCurrentDate(new Date());
 
+    const calendarScrollRef = useRef<HTMLDivElement>(null);
+    const calendarGridRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const grid = calendarGridRef.current;
+        const scroller = calendarScrollRef.current;
+        if (!grid || !scroller || scheduleMainView !== 'calendar') return;
+
+        let accumulated = 0;
+        let lastFlipAt = 0;
+        let lastNativeScrollAt = 0;
+        const markNativeScroll = () => { lastNativeScrollAt = Date.now(); };
+
+        const handleWheel = (e: WheelEvent) => {
+            if (e.ctrlKey || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+            const direction = e.deltaY > 0 ? 1 : -1;
+            const canScrollInside = direction > 0
+                ? scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 1
+                : scroller.scrollTop > 0;
+            if (canScrollInside) {
+                accumulated = 0;
+                return;
+            }
+
+            e.preventDefault();
+            const now = Date.now();
+            if (now - lastFlipAt < CALENDAR_WHEEL_COOLDOWN_MS || now - lastNativeScrollAt < CALENDAR_WHEEL_COOLDOWN_MS) {
+                accumulated = 0;
+                return;
+            }
+            if (accumulated !== 0 && Math.sign(accumulated) !== direction) accumulated = 0;
+            const pixels = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * scroller.clientHeight : e.deltaY;
+            accumulated += pixels;
+            if (Math.abs(accumulated) < CALENDAR_WHEEL_THRESHOLD) return;
+
+            accumulated = 0;
+            lastFlipAt = now;
+            setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + direction, 1));
+            scroller.scrollTop = 0;
+        };
+
+        scroller.addEventListener('scroll', markNativeScroll, { passive: true });
+        grid.addEventListener('wheel', handleWheel, { passive: false });
+        return () => {
+            scroller.removeEventListener('scroll', markNativeScroll);
+            grid.removeEventListener('wheel', handleWheel);
+        };
+    }, [scheduleMainView]);
+
     // Generate Calendar Grid with Prev/Next Month padding
     const calendarDays = useMemo(() => {
         const firstDayOfMonth = new Date(year, month, 1);
@@ -1693,7 +1819,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                 </div>
 
                 {/* Calendar Grid OR 체크리스트 완료 기록 */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col bg-base-100 min-h-0 relative">
+                <div ref={calendarScrollRef} className="flex-1 overflow-y-auto custom-scrollbar flex flex-col bg-base-100 min-h-0 relative">
                     {scheduleMainView === 'checklistLog' ? (
                         <div className="p-3 sm:p-4 flex flex-col gap-3 min-h-0 flex-1">
                             <p className="text-sm text-base-content-secondary">
@@ -1802,7 +1928,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                     </div>
 
                     {/* Days Grid */}
-                    <div className="grid grid-cols-7 auto-rows-fr flex-1 bg-base-200 gap-px border-b border-base-300">
+                    <div ref={calendarGridRef} className="grid grid-cols-7 auto-rows-fr flex-1 bg-base-200 gap-px border-b border-base-300">
                         {calendarDays.map((cell, i) => {
                             const dateStr = cell.dateStr;
                             const isToday = dateStr === getTodayString();

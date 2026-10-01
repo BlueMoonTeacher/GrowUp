@@ -134,19 +134,34 @@
         opacity: 1;
       }
 
-      /* 세로형 태블릿/모니터에서는 남는 하단 공간을 체크리스트에 사용한다. */
+      /* 세로 화면에서는 달력 5주에 공간을 먼저 배정한다. */
       @media (orientation: portrait) and (min-width: 768px) {
+        .schedule-calendar-panel {
+          height: max(520px, calc(100dvh - 30rem));
+          max-height: none;
+        }
+
+        .schedule-calendar-grid {
+          grid-auto-rows: var(--schedule-week-height, 1fr);
+          flex: none;
+        }
+
+        .schedule-calendar-grid > div {
+          min-height: 0;
+          overflow-y: auto;
+        }
+
         .schedule-checklist-grid {
-          min-height: min(42rem, calc(100dvh - 8rem));
+          min-height: 0;
         }
 
         .schedule-checklist-card {
-          min-height: 32rem;
+          min-height: 17rem;
         }
 
         .schedule-checklist-list {
-          min-height: 23rem;
-          max-height: none !important;
+          min-height: 9rem;
+          max-height: 12rem;
         }
       }
 

@@ -1357,6 +1357,30 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
         const scroller = calendarScrollRef.current;
         if (!grid || !scroller || scheduleMainView !== 'calendar') return;
 
+        const sizeWeeks = () => {
+            // The summary and weekday header also occupy the scroll container.
+            // Include scrollTop so scrolling cannot change the calculated row size.
+            const gridTop = grid.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+            const availableHeight = scroller.clientHeight - gridTop;
+            grid.style.setProperty('--schedule-week-height', `${Math.max(48, (availableHeight - 5) / 5)}px`);
+        };
+        const observer = new ResizeObserver(sizeWeeks);
+        observer.observe(scroller);
+        if (grid.previousElementSibling) observer.observe(grid.previousElementSibling);
+        if (grid.previousElementSibling?.previousElementSibling) observer.observe(grid.previousElementSibling.previousElementSibling);
+        sizeWeeks();
+        window.addEventListener('resize', sizeWeeks);
+        return () => {
+            observer.disconnect();
+            window.removeEventListener('resize', sizeWeeks);
+        };
+    }, [scheduleMainView, loading]);
+
+    useEffect(() => {
+        const grid = calendarGridRef.current;
+        const scroller = calendarScrollRef.current;
+        if (!grid || !scroller || scheduleMainView !== 'calendar') return;
+
         let accumulated = 0;
         let lastFlipAt = 0;
         let lastNativeScrollAt = 0;
@@ -1628,7 +1652,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
     return (
         <div className="h-full flex flex-col gap-6 overflow-y-auto custom-scrollbar xl:flex-row xl:overflow-hidden">
             {/* Left: Calendar (LG: 70%) — 모바일 order-1 */}
-            <div className="relative order-1 flex h-[72dvh] min-h-[520px] max-h-[900px] shrink-0 flex-col overflow-hidden rounded-xl border border-base-300/60 bg-base-100 shadow-lg xl:order-none xl:h-auto xl:max-h-none xl:min-h-0 xl:flex-[7]">
+            <div className="schedule-calendar-panel relative order-1 flex h-[72dvh] min-h-[520px] max-h-[900px] shrink-0 flex-col overflow-hidden rounded-xl border border-base-300/60 bg-base-100 shadow-lg xl:order-none xl:h-auto xl:max-h-none xl:min-h-0 xl:flex-[7]">
                 {/* Header */}
                 <div className="p-3 sm:p-4 border-b border-base-300 flex flex-wrap items-center justify-between bg-base-50 shrink-0 gap-2">
                     {/* Left Group */}
@@ -1928,7 +1952,7 @@ const ScheduleManager = ({ appSettings }: { appSettings: AppSettings }): React.R
                     </div>
 
                     {/* Days Grid */}
-                    <div ref={calendarGridRef} className="grid grid-cols-7 auto-rows-fr flex-1 bg-base-200 gap-px border-b border-base-300">
+                    <div ref={calendarGridRef} className="schedule-calendar-grid grid grid-cols-7 auto-rows-fr flex-1 bg-base-200 gap-px border-b border-base-300">
                         {calendarDays.map((cell, i) => {
                             const dateStr = cell.dateStr;
                             const isToday = dateStr === getTodayString();

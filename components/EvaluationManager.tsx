@@ -299,7 +299,8 @@ const AssessmentSetup = ({
     const [hideExcluded, setHideExcluded] = useState(() => loadSetupFilter().hideExcluded);
     const [searchQuery, setSearchQuery] = useState('');
     const [isBulkUpdating, setIsBulkUpdating] = useState(false);
-    const formRef = useRef<HTMLDivElement>(null);
+    // Below the lg breakpoint (portrait tablets) the form is shown as a bottom sheet instead of a side column.
+    const [isFormSheetOpen, setIsFormSheetOpen] = useState(false);
     const createInitialFormState = () => ({
         semester: (semesterFilter === 'all' ? getCurrentSemester() : semesterFilter) as string,
         subject: '국어',
@@ -379,10 +380,27 @@ const AssessmentSetup = ({
         }
     };
 
+    useEffect(() => {
+        if (!isFormSheetOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setIsFormSheetOpen(false);
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isFormSheetOpen]);
+
+    const handleOpenNewForm = () => {
+        handleResetForm();
+        setIsFormSheetOpen(true);
+    };
+
+    const handleCloseFormSheet = () => {
+        setIsFormSheetOpen(false);
+        handleResetForm();
+    };
+
     const handleSelectAssessment = (assessment: Assessment) => {
-        if (window.innerWidth < 768) {
-            formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
+        setIsFormSheetOpen(true);
         setEditingId(assessment.id);
         setFormData({
             semester: assessment.semester,
@@ -411,6 +429,7 @@ const AssessmentSetup = ({
                 await showAlert("평가 계획이 추가되었습니다.");
             }
             handleResetForm();
+            setIsFormSheetOpen(false);
         } catch (e) {
             await showAlert("오류가 발생했습니다.");
         }
@@ -508,7 +527,8 @@ const AssessmentSetup = ({
     const inputClass = "w-full p-2 rounded border border-base-300 bg-white text-gray-900 focus:ring-primary focus:border-primary placeholder-gray-400";
 
     return (
-        <div className="h-full flex flex-col md:flex-row gap-4 p-4 overflow-y-auto lg:overflow-hidden pb-20 lg:pb-0">
+        <div className="h-full flex flex-col lg:flex-row gap-4 p-3 sm:p-4 overflow-y-auto lg:overflow-hidden pb-20 lg:pb-0">
+            <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,application/pdf" />
             {isPreviewOpen && (
                 <AssessmentPreviewModal 
                     previewData={previewData} 
@@ -536,7 +556,9 @@ const AssessmentSetup = ({
                              등록된 계획 목록
                              <span className="ml-1.5 text-xs font-medium text-gray-400">총 {assessments.length}건</span>
                          </span>
-                         <div className="flex gap-1.5">
+                         <div className="flex flex-wrap items-center gap-1.5">
+                            <button type="button" onClick={handleOpenNewForm} className="lg:hidden text-xs bg-primary text-white hover:bg-primary-focus px-3 py-1.5 rounded-lg font-bold shadow-sm transition-colors">+ 새 계획</button>
+                            <button type="button" onClick={() => fileInputRef.current?.click()} className="lg:hidden text-xs bg-white border border-base-300 hover:bg-base-100 px-3 py-1.5 rounded-lg font-bold shadow-sm text-gray-700 transition-colors">PDF/이미지</button>
                             <button onClick={() => onDeleteSemester('1')} className="text-[11px] text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-md font-bold transition-colors">1학기 초기화</button>
                             <button onClick={() => onDeleteSemester('2')} className="text-[11px] text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-md font-bold transition-colors">2학기 초기화</button>
                          </div>
@@ -615,7 +637,7 @@ const AssessmentSetup = ({
                                 {semesterFilter === 'all' && <th className="px-2 py-2 w-16 text-center border-b font-bold">학기</th>}
                                 <th className="px-2 py-2 w-20 text-center border-b font-bold">교과</th>
                                 <th className="px-2 py-2 text-left border-b font-bold">평가요소 / 성취기준</th>
-                                <th className="px-2 py-2 w-16 text-center border-b font-bold">입력 제외</th>
+                                <th className="px-2 py-2 w-16 text-center border-b font-bold whitespace-nowrap">입력 제외</th>
                                 <th className="px-2 py-2 w-12 text-center border-b font-bold">삭제</th>
                             </tr>
                         </thead>
@@ -640,10 +662,8 @@ const AssessmentSetup = ({
                                         {a.timing && <div className="text-[10px] text-gray-500 mt-1 font-bold">{a.timing}</div>}
                                     </td>
                                     <td className="px-2 py-2.5">
-                                        <div className="font-bold text-gray-800 leading-snug">
-                                            {a.domain && <span className="mr-1.5 inline-block align-middle px-1.5 rounded bg-base-100 border border-base-200 text-[10px] font-medium text-gray-500">{a.domain}</span>}
-                                            {a.evaluationElement}
-                                        </div>
+                                        {a.domain && <div className="text-[11px] font-medium text-gray-400 leading-tight mb-0.5 truncate">{a.domain}</div>}
+                                        <div className="font-bold text-gray-800 leading-snug">{a.evaluationElement}</div>
                                         <div className="text-xs text-gray-500 mt-0.5 line-clamp-2" title={a.achievementStandard}>{a.achievementStandard}</div>
                                     </td>
                                     <td className="px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
@@ -667,7 +687,7 @@ const AssessmentSetup = ({
                                     </td>
                                 </tr>
                             ))}
-                            {assessments.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-base-content-secondary">등록된 평가 계획이 없습니다. 오른쪽의 PDF/이미지 버튼으로 평가 계획 문서를 불러올 수 있습니다.</td></tr>}
+                            {assessments.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-base-content-secondary">등록된 평가 계획이 없습니다. PDF/이미지 버튼으로 평가 계획 문서를 불러올 수 있습니다.</td></tr>}
                             {assessments.length > 0 && visibleAssessments.length === 0 && (
                                 <tr>
                                     <td colSpan={5} className="p-8 text-center text-gray-500">
@@ -681,21 +701,30 @@ const AssessmentSetup = ({
                  </div>
             </div>
             {/* iPad Fix: Added pb-32 to form container scroll */}
-            <div ref={formRef} className="w-full md:w-96 shrink-0 bg-base-50 p-4 rounded-xl border border-base-300 overflow-y-auto custom-scrollbar shadow-inner flex flex-col h-fit md:max-h-full pb-32 scroll-mt-4">
-                {/* Form Content ... */}
+            {isFormSheetOpen && (
+                <div className="lg:hidden fixed inset-0 z-[110] bg-black/40 backdrop-blur-[1px]" onClick={handleCloseFormSheet} aria-hidden="true" />
+            )}
+            <div
+                className={`${isFormSheetOpen ? 'fixed inset-x-0 bottom-0 z-[111] max-h-[88vh] rounded-t-2xl shadow-2xl flex pb-8' : 'hidden'} lg:static lg:z-auto lg:flex lg:max-h-full lg:h-fit lg:rounded-xl lg:shadow-inner lg:pb-32 w-full lg:w-96 shrink-0 bg-base-50 p-4 border border-base-300 overflow-y-auto custom-scrollbar flex-col`}
+                role={isFormSheetOpen ? 'dialog' : undefined}
+                aria-modal={isFormSheetOpen ? true : undefined}
+            >
+                <div className="lg:hidden mx-auto -mt-1 mb-3 h-1.5 w-10 rounded-full bg-gray-300" aria-hidden="true" />
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-lg flex items-center gap-2 text-base-content">
                         {editingId ? <span className="text-primary">✏️ 평가 계획 수정</span> : <span className="text-primary">+ 평가 계획 등록</span>}
                     </h3>
-                    {!editingId && (
-                        <>
-                            <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept="image/*,application/pdf" />
-                            <button type="button" onClick={() => fileInputRef.current?.click()} className="text-xs bg-white border border-base-300 hover:bg-base-100 px-3 py-1.5 rounded-lg font-bold flex items-center gap-1 shadow-sm text-gray-700">
+                    <div className="flex items-center gap-1.5">
+                        {!editingId && (
+                            <button type="button" onClick={() => fileInputRef.current?.click()} className="hidden lg:flex text-xs bg-white border border-base-300 hover:bg-base-100 px-3 py-1.5 rounded-lg font-bold items-center gap-1 shadow-sm text-gray-700">
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
                                 PDF/이미지
                             </button>
-                        </>
-                    )}
+                        )}
+                        <button type="button" onClick={handleCloseFormSheet} className="lg:hidden p-1.5 rounded-lg text-gray-500 hover:bg-base-200" aria-label="닫기">
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-3 flex-1">
                     {/* ... Form inputs ... */}

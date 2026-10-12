@@ -82,6 +82,41 @@ const getCurrentSemester = () => {
     return (month >= 3 && month <= 8) ? '1' : '2';
 };
 
+type SemesterFilter = 'all' | '1' | '2';
+type SubjectGroupFilter = 'all' | 'core' | 'arts' | 'others';
+
+const SUBJECT_GROUP_FILTERS: { id: SubjectGroupFilter; label: string; subjects?: string[] }[] = [
+    { id: 'all', label: '전체' },
+    { id: 'core', label: '국·수·사', subjects: ['국어', '수학', '사회'] },
+    { id: 'arts', label: '음·미·체', subjects: ['음악', '미술', '체육'] },
+    { id: 'others', label: '그 외' },
+];
+
+const getSubjectGroup = (subject: string): Exclude<SubjectGroupFilter, 'all'> => {
+    const normalized = (subject || '').replace(/\s/g, '');
+    const matches = (id: SubjectGroupFilter) =>
+        SUBJECT_GROUP_FILTERS.find(group => group.id === id)?.subjects?.some(name => normalized.startsWith(name));
+    if (matches('core')) return 'core';
+    if (matches('arts')) return 'arts';
+    return 'others';
+};
+
+const SETUP_FILTER_STORAGE_KEY = 'growup.assessmentSetupFilter';
+
+const loadSetupFilter = (): { semester: SemesterFilter; group: SubjectGroupFilter; hideExcluded: boolean } => {
+    const fallback = { semester: 'all' as SemesterFilter, group: 'all' as SubjectGroupFilter, hideExcluded: false };
+    try {
+        const saved = JSON.parse(localStorage.getItem(SETUP_FILTER_STORAGE_KEY) || '{}');
+        return {
+            semester: ['all', '1', '2'].includes(saved.semester) ? saved.semester : fallback.semester,
+            group: SUBJECT_GROUP_FILTERS.some(group => group.id === saved.group) ? saved.group : fallback.group,
+            hideExcluded: Boolean(saved.hideExcluded),
+        };
+    } catch {
+        return fallback;
+    }
+};
+
 // --- Sub-Components ---
 
 const AssessmentPreviewModal = ({ 
@@ -259,22 +294,95 @@ const AssessmentSetup = ({
     const [previewData, setPreviewData] = useState<Omit<Assessment, 'id' | 'createdAt' | 'schoolYear'>[]>([]);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
-    const initialFormState = {
-        semester: '2',
+    const [semesterFilter, setSemesterFilter] = useState<SemesterFilter>(() => loadSetupFilter().semester);
+    const [groupFilter, setGroupFilter] = useState<SubjectGroupFilter>(() => loadSetupFilter().group);
+    const [hideExcluded, setHideExcluded] = useState(() => loadSetupFilter().hideExcluded);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+    const formRef = useRef<HTMLDivElement>(null);
+    const createInitialFormState = () => ({
+        semester: (semesterFilter === 'all' ? getCurrentSemester() : semesterFilter) as string,
         subject: '국어',
         domain: '',
         achievementStandard: '',
         evaluationElement: '',
         timing: '',
         criteria: { high: '', middle: '', low: '' }
-    };
-    const [formData, setFormData] = useState(initialFormState);
+    });
+    const [formData, setFormData] = useState(createInitialFormState);
+
+    useEffect(() => {
+        try {
+            localStorage.setItem(SETUP_FILTER_STORAGE_KEY, JSON.stringify({ semester: semesterFilter, group: groupFilter, hideExcluded }));
+        } catch {
+            // 저장 공간을 쓸 수 없는 환경에서는 필터를 기억하지 않는다.
+        }
+    }, [semesterFilter, groupFilter, hideExcluded]);
 
     const sortedAssessments = useMemo(() => {
         return [...assessments].sort(sortAssessments);
     }, [assessments]);
 
+    const searchedAssessments = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        return sortedAssessments.filter(a => {
+            if (hideExcluded && a.isExcluded) return false;
+            if (!query) return true;
+            return [a.subject, a.domain, a.evaluationElement, a.achievementStandard, a.timing]
+                .some(value => (value || '').toLowerCase().includes(query));
+        });
+    }, [sortedAssessments, searchQuery, hideExcluded]);
+
+    const semesterCounts = useMemo(() => {
+        const inGroup = searchedAssessments.filter(a => groupFilter === 'all' || getSubjectGroup(a.subject) === groupFilter);
+        return {
+            all: inGroup.length,
+            '1': inGroup.filter(a => a.semester === '1').length,
+            '2': inGroup.filter(a => a.semester === '2').length,
+        } as Record<SemesterFilter, number>;
+    }, [searchedAssessments, groupFilter]);
+
+    const groupCounts = useMemo(() => {
+        const inSemester = searchedAssessments.filter(a => semesterFilter === 'all' || a.semester === semesterFilter);
+        const counts: Record<SubjectGroupFilter, number> = { all: inSemester.length, core: 0, arts: 0, others: 0 };
+        inSemester.forEach(a => { counts[getSubjectGroup(a.subject)] += 1; });
+        return counts;
+    }, [searchedAssessments, semesterFilter]);
+
+    const visibleAssessments = useMemo(() => searchedAssessments.filter(a =>
+        (semesterFilter === 'all' || a.semester === semesterFilter)
+        && (groupFilter === 'all' || getSubjectGroup(a.subject) === groupFilter)
+    ), [searchedAssessments, semesterFilter, groupFilter]);
+
+    const visibleExcludedCount = visibleAssessments.filter(a => a.isExcluded).length;
+    const allVisibleExcluded = visibleAssessments.length > 0 && visibleExcludedCount === visibleAssessments.length;
+    const hasActiveFilter = semesterFilter !== 'all' || groupFilter !== 'all' || hideExcluded || searchQuery.trim() !== '';
+
+    const handleResetFilters = () => {
+        setSemesterFilter('all');
+        setGroupFilter('all');
+        setHideExcluded(false);
+        setSearchQuery('');
+    };
+
+    const handleBulkExclude = async () => {
+        if (visibleAssessments.length === 0) return;
+        const nextExcluded = !allVisibleExcluded;
+        const targets = visibleAssessments.filter(a => Boolean(a.isExcluded) !== nextExcluded);
+        setIsBulkUpdating(true);
+        try {
+            await Promise.all(targets.map(a => onUpdate(a.id, { isExcluded: nextExcluded })));
+        } catch {
+            await showAlert("일괄 변경 중 오류가 발생했습니다.");
+        } finally {
+            setIsBulkUpdating(false);
+        }
+    };
+
     const handleSelectAssessment = (assessment: Assessment) => {
+        if (window.innerWidth < 768) {
+            formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
         setEditingId(assessment.id);
         setFormData({
             semester: assessment.semester,
@@ -289,7 +397,7 @@ const AssessmentSetup = ({
 
     const handleResetForm = () => {
         setEditingId(null);
-        setFormData(initialFormState);
+        setFormData(createInitialFormState());
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -422,48 +530,123 @@ const AssessmentSetup = ({
                         </div>
                     </div>
                  )}
-                 <div className="p-3 border-b border-base-200 bg-base-50 flex justify-between items-center shrink-0">
-                     <span className="text-sm font-bold text-gray-500">등록된 계획 목록</span>
-                     <div className="flex gap-2">
-                        <button onClick={() => onDeleteSemester('1')} className="text-xs bg-white text-red-600 border border-red-200 hover:bg-red-50 px-2 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors">1학기 초기화</button>
-                        <button onClick={() => onDeleteSemester('2')} className="text-xs bg-white text-red-600 border border-red-200 hover:bg-red-50 px-2 py-1.5 rounded-lg font-bold flex items-center gap-1 transition-colors">2학기 초기화</button>
+                 <div className="px-3 pt-3 pb-2 border-b border-base-200 bg-base-50 shrink-0 space-y-2">
+                     <div className="flex flex-wrap justify-between items-center gap-2">
+                         <span className="text-sm font-bold text-gray-700">
+                             등록된 계획 목록
+                             <span className="ml-1.5 text-xs font-medium text-gray-400">총 {assessments.length}건</span>
+                         </span>
+                         <div className="flex gap-1.5">
+                            <button onClick={() => onDeleteSemester('1')} className="text-[11px] text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-md font-bold transition-colors">1학기 초기화</button>
+                            <button onClick={() => onDeleteSemester('2')} className="text-[11px] text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-md font-bold transition-colors">2학기 초기화</button>
+                         </div>
+                     </div>
+                     <div className="flex flex-wrap items-center gap-2">
+                         <div className="inline-flex rounded-lg bg-white border border-base-300 p-0.5 shadow-sm" role="group" aria-label="학기 선택">
+                             {(['all', '1', '2'] as SemesterFilter[]).map(value => (
+                                 <button
+                                     key={value}
+                                     type="button"
+                                     onClick={() => setSemesterFilter(value)}
+                                     aria-pressed={semesterFilter === value}
+                                     className={`px-3 py-1 rounded-md text-xs font-bold transition-colors whitespace-nowrap ${semesterFilter === value ? 'bg-primary text-white shadow-sm' : 'text-gray-600 hover:bg-base-100'}`}
+                                 >
+                                     {value === 'all' ? '전체 학기' : `${value}학기`}
+                                     <span className={`ml-1 font-medium ${semesterFilter === value ? 'text-white/80' : 'text-gray-400'}`}>{semesterCounts[value]}</span>
+                                 </button>
+                             ))}
+                         </div>
+                         <div className="inline-flex rounded-lg bg-white border border-base-300 p-0.5 shadow-sm" role="group" aria-label="교과 묶음 선택">
+                             {SUBJECT_GROUP_FILTERS.map(group => (
+                                 <button
+                                     key={group.id}
+                                     type="button"
+                                     onClick={() => setGroupFilter(group.id)}
+                                     aria-pressed={groupFilter === group.id}
+                                     title={group.subjects ? group.subjects.join(', ') : group.id === 'others' ? '국·수·사, 음·미·체를 제외한 교과' : undefined}
+                                     className={`px-3 py-1 rounded-md text-xs font-bold transition-colors whitespace-nowrap ${groupFilter === group.id ? 'bg-gray-800 text-white shadow-sm' : 'text-gray-600 hover:bg-base-100'}`}
+                                 >
+                                     {group.label}
+                                     <span className={`ml-1 font-medium ${groupFilter === group.id ? 'text-white/70' : 'text-gray-400'}`}>{groupCounts[group.id]}</span>
+                                 </button>
+                             ))}
+                         </div>
+                         <div className="relative flex-1 min-w-[10rem]">
+                             <svg className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z" /></svg>
+                             <input
+                                 type="search"
+                                 value={searchQuery}
+                                 onChange={e => setSearchQuery(e.target.value)}
+                                 placeholder="평가요소·성취기준 검색"
+                                 className="w-full pl-8 pr-2 py-1.5 text-xs rounded-lg border border-base-300 bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-primary"
+                             />
+                         </div>
+                     </div>
+                     <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
+                         <div className="flex items-center gap-3 text-gray-500">
+                             <span>
+                                 <strong className="text-gray-800">{visibleAssessments.length}</strong>건 표시
+                                 {visibleExcludedCount > 0 && <span className="ml-1">(입력 제외 {visibleExcludedCount})</span>}
+                             </span>
+                             <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                                 <input type="checkbox" checked={hideExcluded} onChange={e => setHideExcluded(e.target.checked)} className="w-3.5 h-3.5 accent-primary" />
+                                 입력 제외 숨기기
+                             </label>
+                             {hasActiveFilter && (
+                                 <button type="button" onClick={handleResetFilters} className="text-primary font-bold hover:underline">필터 초기화</button>
+                             )}
+                         </div>
+                         <button
+                             type="button"
+                             onClick={handleBulkExclude}
+                             disabled={visibleAssessments.length === 0 || isBulkUpdating}
+                             title="현재 목록에 보이는 평가 계획의 입력 제외를 한 번에 바꿉니다 (전담 교과 등)"
+                             className="px-2.5 py-1 rounded-md border border-amber-200 bg-amber-50 text-amber-700 font-bold hover:bg-amber-100 transition-colors disabled:opacity-40"
+                         >
+                             {isBulkUpdating ? '변경 중...' : allVisibleExcluded ? '표시된 항목 입력 제외 해제' : '표시된 항목 모두 입력 제외'}
+                         </button>
                      </div>
                  </div>
                  {/* iPad Fix: Added pb-40 */}
                  <div className="overflow-auto custom-scrollbar flex-1 pb-40">
                     <table className="w-full text-sm">
-                        <thead className="bg-white sticky top-0 z-10 text-base-content-secondary shadow-sm">
+                        <thead className="bg-white sticky top-0 z-10 text-xs text-gray-500 shadow-sm">
                             <tr>
-                                <th className="p-2 w-16 text-center border-b">학기</th>
-                                <th className="p-2 w-20 text-center border-b">교과</th>
-                                <th className="p-2 text-left border-b">평가요소 / 성취기준</th>
-                                <th className="p-2 w-20 text-center border-b">입력 제외</th>
-                                <th className="p-2 w-16 text-center border-b">작업</th>
+                                {semesterFilter === 'all' && <th className="px-2 py-2 w-16 text-center border-b font-bold">학기</th>}
+                                <th className="px-2 py-2 w-20 text-center border-b font-bold">교과</th>
+                                <th className="px-2 py-2 text-left border-b font-bold">평가요소 / 성취기준</th>
+                                <th className="px-2 py-2 w-16 text-center border-b font-bold">입력 제외</th>
+                                <th className="px-2 py-2 w-12 text-center border-b font-bold">삭제</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-base-200">
-                            {sortedAssessments.map(a => (
+                            {visibleAssessments.map(a => (
                                 <tr 
                                     key={a.id} 
-                                    className={`hover:bg-base-50 cursor-pointer transition-colors ${editingId === a.id ? 'bg-primary/5 border-l-4 border-l-primary' : ''} ${a.isExcluded ? 'opacity-60 bg-gray-50' : ''}`}
+                                    className={`hover:bg-base-50 cursor-pointer transition-colors ${editingId === a.id ? 'bg-primary/5 border-l-4 border-l-primary' : ''} ${a.isExcluded ? 'opacity-55 bg-gray-50' : ''}`}
                                     onClick={() => handleSelectAssessment(a)}
                                 >
-                                    <td className="p-3 text-center">
-                                        <span className="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-bold text-xs border border-gray-200 whitespace-nowrap badge-no-wrap">
-                                            {a.semester}학기
-                                        </span>
-                                    </td>
-                                    <td className="p-3 text-center">
+                                    {semesterFilter === 'all' && (
+                                        <td className="px-2 py-2.5 text-center">
+                                            <span className="inline-block px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-bold text-xs border border-gray-200 whitespace-nowrap badge-no-wrap">
+                                                {a.semester}학기
+                                            </span>
+                                        </td>
+                                    )}
+                                    <td className="px-2 py-2.5 text-center">
                                         <span className={`inline-block px-2 py-0.5 rounded font-bold text-xs badge-no-wrap ${getSubjectColor(a.subject)}`}>
                                             {a.subject}
                                         </span>
                                         {a.timing && <div className="text-[10px] text-gray-500 mt-1 font-bold">{a.timing}</div>}
                                     </td>
-                                    <td className="p-3">
-                                        <div className="font-bold text-gray-800">{a.evaluationElement}</div>
-                                        <div className="text-xs text-gray-500 mt-1">{a.achievementStandard}</div>
+                                    <td className="px-2 py-2.5">
+                                        <div className="font-bold text-gray-800 leading-snug">
+                                            {a.domain && <span className="mr-1.5 inline-block align-middle px-1.5 rounded bg-base-100 border border-base-200 text-[10px] font-medium text-gray-500">{a.domain}</span>}
+                                            {a.evaluationElement}
+                                        </div>
+                                        <div className="text-xs text-gray-500 mt-0.5 line-clamp-2" title={a.achievementStandard}>{a.achievementStandard}</div>
                                     </td>
-                                    <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                                    <td className="px-2 py-2.5 text-center" onClick={(e) => e.stopPropagation()}>
                                         <label className="cursor-pointer flex items-center justify-center group" title="전담 교사 담당 등으로 평가 입력 제외 시 체크">
                                             <input 
                                                 type="checkbox" 
@@ -473,7 +656,7 @@ const AssessmentSetup = ({
                                             />
                                         </label>
                                     </td>
-                                    <td className="p-3 text-center">
+                                    <td className="px-2 py-2.5 text-center">
                                         <button 
                                             onClick={(e) => { e.stopPropagation(); onDelete(a.id); }} 
                                             className="text-red-500 hover:bg-red-50 p-1.5 rounded transition-colors"
@@ -484,13 +667,21 @@ const AssessmentSetup = ({
                                     </td>
                                 </tr>
                             ))}
-                            {assessments.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-base-content-secondary">등록된 평가 계획이 없습니다.</td></tr>}
+                            {assessments.length === 0 && <tr><td colSpan={5} className="p-8 text-center text-base-content-secondary">등록된 평가 계획이 없습니다. 오른쪽의 PDF/이미지 버튼으로 평가 계획 문서를 불러올 수 있습니다.</td></tr>}
+                            {assessments.length > 0 && visibleAssessments.length === 0 && (
+                                <tr>
+                                    <td colSpan={5} className="p-8 text-center text-gray-500">
+                                        조건에 맞는 평가 계획이 없습니다.
+                                        <button type="button" onClick={handleResetFilters} className="ml-2 text-primary font-bold hover:underline">필터 초기화</button>
+                                    </td>
+                                </tr>
+                            )}
                         </tbody>
                     </table>
                  </div>
             </div>
             {/* iPad Fix: Added pb-32 to form container scroll */}
-            <div className="w-full md:w-96 bg-base-50 p-4 rounded-xl border border-base-300 overflow-y-auto custom-scrollbar shadow-inner flex flex-col h-fit pb-32">
+            <div ref={formRef} className="w-full md:w-96 shrink-0 bg-base-50 p-4 rounded-xl border border-base-300 overflow-y-auto custom-scrollbar shadow-inner flex flex-col h-fit md:max-h-full pb-32 scroll-mt-4">
                 {/* Form Content ... */}
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-lg flex items-center gap-2 text-base-content">

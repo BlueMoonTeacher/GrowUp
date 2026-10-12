@@ -53,7 +53,12 @@ async function requestApi<T>(path: string, init: RequestInit = {}): Promise<T> {
     } catch {
       // 서버가 JSON 오류 본문을 반환하지 못한 경우 기본 문구를 사용한다.
     }
-    throw new Error(body.error?.message || '보안 API 요청을 처리하지 못했습니다.');
+    const fallbackMessage = response.status === 504
+      ? 'AI 분석 시간이 너무 오래 걸려 중단되었습니다. 잠시 후 다시 시도해 주세요.'
+      : response.status === 413
+        ? '첨부파일이 너무 큽니다. 파일 크기를 줄여 다시 시도해 주세요.'
+        : '보안 API 요청을 처리하지 못했습니다.';
+    throw new Error(body.error?.message || fallbackMessage);
   }
 
   if (response.status === 204) {

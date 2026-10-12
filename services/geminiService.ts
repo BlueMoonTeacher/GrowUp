@@ -1,5 +1,5 @@
 
-import { Type } from "@google/genai";
+import { ThinkingLevel, Type } from "@google/genai";
 import { Student, BehaviorRecord, AnalysisResult, Assessment, BehaviorAnalysisMode } from "../types";
 import { normalizeGeminiModel } from "../constants/geminiModels";
 import { resolveObservationType } from "../utils/behaviorUtils";
@@ -441,11 +441,173 @@ export async function softenBehaviorReport(
     }
 }
 
-export async function extractAssessmentPlanFromFile(file: File, _apiKey?: string, model?: string): Promise<Omit<Assessment, 'id' | 'createdAt' | 'schoolYear'>[]> {
-    const selectedModel = normalizeGeminiModel(model);
+type ExtractedAssessmentPlan = Omit<Assessment, 'id' | 'createdAt' | 'schoolYear'>;
 
-    const imagePart = await fileToGenerativePart(file);
+export interface AssessmentPlanExtraction {
+    plans: ExtractedAssessmentPlan[];
+    failedPages: string[];
+}
 
+interface AssessmentDocumentChunk {
+    part: { inlineData: { data: string; mimeType: string } };
+    firstPage: number;
+    lastPage: number;
+    totalPages: number;
+    hasContextPage: boolean;
+}
+
+// One request for a whole multi-page plan produced output long enough to exceed Cloud Run's 300s limit.
+const PDF_PAGES_PER_CHUNK = 2;
+const PDF_SINGLE_REQUEST_MAX_PAGES = 3;
+const PDF_CHUNK_CONCURRENCY = 3;
+const ASSESSMENT_MAX_OUTPUT_TOKENS = 32768;
+
+function getFastThinkingConfig(model: string) {
+    if (model === 'gemini-2.5-flash') return { thinkingBudget: 0 };
+    if (model === 'gemini-2.5-pro') return { thinkingBudget: 128 };
+    return { thinkingLevel: ThinkingLevel.LOW };
+}
+
+async function splitAssessmentDocument(file: File): Promise<AssessmentDocumentChunk[]> {
+    const wholeFile = async (totalPages = 1): Promise<AssessmentDocumentChunk[]> => [{
+        part: await fileToGenerativePart(file),
+        firstPage: 1,
+        lastPage: totalPages,
+        totalPages,
+        hasContextPage: false,
+    }];
+
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) return wholeFile();
+
+    const { PDFDocument } = await import('pdf-lib');
+    let source: Awaited<ReturnType<typeof PDFDocument.load>>;
+    try {
+        source = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: true });
+    } catch {
+        return wholeFile();
+    }
+    const totalPages = source.getPageCount();
+    if (totalPages <= PDF_SINGLE_REQUEST_MAX_PAGES) return wholeFile(totalPages);
+
+    const chunks: AssessmentDocumentChunk[] = [];
+    for (let start = 0; start < totalPages; start += PDF_PAGES_PER_CHUNK) {
+        const end = Math.min(start + PDF_PAGES_PER_CHUNK, totalPages);
+        // The next page is attached so a table row that crosses the page break can be completed.
+        const hasContextPage = end < totalPages;
+        const indices = Array.from({ length: (hasContextPage ? end + 1 : end) - start }, (_, i) => start + i);
+        const chunkDoc = await PDFDocument.create();
+        const pages = await chunkDoc.copyPages(source, indices);
+        pages.forEach(page => chunkDoc.addPage(page));
+        chunks.push({
+            part: { inlineData: { data: await chunkDoc.saveAsBase64(), mimeType: 'application/pdf' } },
+            firstPage: start + 1,
+            lastPage: end,
+            totalPages,
+            hasContextPage,
+        });
+    }
+    return chunks;
+}
+
+// Salvages complete row objects when the model output is cut off mid-array.
+function parseJsonArrayLoose(text: string): unknown[] {
+    try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) return parsed;
+        return parsed && typeof parsed === 'object' ? [parsed] : [];
+    } catch {
+        const start = text.indexOf('[');
+        if (start < 0) return [];
+        let depth = 0;
+        let inString = false;
+        let escaped = false;
+        let lastObjectEnd = -1;
+        for (let i = start + 1; i < text.length; i++) {
+            const ch = text[i];
+            if (inString) {
+                if (escaped) escaped = false;
+                else if (ch === '\\') escaped = true;
+                else if (ch === '"') inString = false;
+                continue;
+            }
+            if (ch === '"') inString = true;
+            else if (ch === '{') depth++;
+            else if (ch === '}' && --depth === 0) lastObjectEnd = i;
+        }
+        if (lastObjectEnd < 0) return [];
+        try {
+            return JSON.parse(text.slice(start, lastObjectEnd + 1) + ']');
+        } catch {
+            return [];
+        }
+    }
+}
+
+const toText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
+function normalizeExtractedPlans(rows: unknown[]): ExtractedAssessmentPlan[] {
+    let previousSubject = '';
+    let previousSemester = '';
+    const plans: ExtractedAssessmentPlan[] = [];
+    for (const raw of rows) {
+        if (!raw || typeof raw !== 'object') continue;
+        const row = raw as Record<string, any>;
+        const subject = toText(row.subject) || previousSubject;
+        const semester = toText(row.semester).replace(/[^12]/g, '').slice(0, 1) || previousSemester;
+        const plan: ExtractedAssessmentPlan = {
+            subject,
+            semester,
+            domain: toText(row.domain),
+            timing: toText(row.timing),
+            achievementStandard: toText(row.achievementStandard),
+            evaluationElement: toText(row.evaluationElement),
+            criteria: {
+                high: toText(row.criteria?.high),
+                middle: toText(row.criteria?.middle),
+                low: toText(row.criteria?.low),
+            },
+        };
+        if (!plan.evaluationElement && !plan.achievementStandard) continue;
+
+        const last = plans[plans.length - 1];
+        if (last && last.subject === plan.subject && last.evaluationElement === plan.evaluationElement
+            && last.achievementStandard === plan.achievementStandard) {
+            (['high', 'middle', 'low'] as const).forEach(level => {
+                if (plan.criteria[level].length > last.criteria[level].length) last.criteria[level] = plan.criteria[level];
+            });
+            continue;
+        }
+        plans.push(plan);
+        previousSubject = subject;
+        previousSemester = semester;
+    }
+    return plans;
+}
+
+function buildChunkInstructions(chunk: AssessmentDocumentChunk): string {
+    if (chunk.totalPages <= PDF_SINGLE_REQUEST_MAX_PAGES && chunk.firstPage === 1 && !chunk.hasContextPage) return '';
+    const pageCountInFile = chunk.lastPage - chunk.firstPage + 1 + (chunk.hasContextPage ? 1 : 0);
+    const lines = [
+        `**분할 처리 안내**: 이 파일은 전체 ${chunk.totalPages}쪽 문서 중 ${chunk.firstPage}~${chunk.lastPage}쪽만 잘라낸 것입니다.`,
+    ];
+    if (chunk.firstPage > 1) {
+        lines.push(
+            '- 첫 페이지 맨 위에 이전 페이지에서 이어지는 행의 나머지(평가기준 일부 등)만 있다면 그 조각은 추출하지 마세요. 이전 분할에서 처리됩니다.',
+            '- 첫 행의 교과 칸이 비어 있으면(이전 페이지에서 병합된 셀) subject를 빈 문자열로 두세요.',
+            '- 표 머리글이 보이지 않아도 열 순서는 앞 페이지와 동일하다고 보고 내용(성취기준 코드, 잘함/보통/노력요함 등)을 근거로 열을 판단하세요.',
+            '- 문서 제목이 없어 학기를 알 수 없으면 시기 열로 추론하고, 그래도 알 수 없으면 semester를 빈 문자열로 두세요.',
+        );
+    }
+    if (chunk.hasContextPage) {
+        lines.push(
+            `- 이 파일의 마지막 페이지(${pageCountInFile}번째 페이지)는 참고용입니다. 앞 페이지에서 시작된 행이 이 페이지로 이어지면 내용을 합쳐 완성하되, 마지막 페이지에서 새로 시작하는 행은 절대 추출하지 마세요.`,
+        );
+    }
+    return lines.join('\n        ');
+}
+
+async function extractAssessmentChunk(chunk: AssessmentDocumentChunk, model: string): Promise<unknown[]> {
     const prompt = `
         다음은 초등학교 평가 계획 문서(이미지 또는 PDF)입니다. 
         이 문서를 분석하여 평가 계획 목록을 JSON 배열로 반환해주세요.
@@ -472,32 +634,65 @@ export async function extractAssessmentPlanFromFile(file: File, _apiKey?: string
            - timing: 평가 시기 (예: 4월, 5월, 11월 4주 등)
            - achievementStandard: 성취기준 코드 및 내용 (예: [6국01-02] ...)
            - evaluationElement: 평가요소 (구체적인 활동 내용)
-           - criteria: 3단계 평가 기준 (잘함, 보통, 노력요함)
+           - criteria: 3단계 평가 기준 (잘함, 보통, 노력요함). 상/중/하로 표기된 경우 상=잘함, 중=보통, 하=노력요함으로 넣으세요.
+
+        5. **원문 유지**: 문서에 적힌 문구를 요약하거나 새로 지어내지 말고 그대로 옮기세요. 표가 아닌 안내 문단, 결재란, 쪽 번호는 무시하세요.
+
+        ${buildChunkInstructions(chunk)}
     `;
 
-    try {
-        const response = await generateGeminiContent({
-            model: selectedModel,
-            contents: { parts: [imagePart, { text: prompt }] },
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: assessmentPlanSchema,
-            },
-        });
+    const response = await generateGeminiContent({
+        model,
+        contents: { parts: [chunk.part, { text: prompt }] },
+        config: {
+            responseMimeType: 'application/json',
+            responseSchema: assessmentPlanSchema,
+            maxOutputTokens: ASSESSMENT_MAX_OUTPUT_TOKENS,
+            thinkingConfig: getFastThinkingConfig(model),
+        },
+    });
+    return parseJsonArrayLoose(response.text || '');
+}
 
-        const text = response.text;
-        const data = JSON.parse(text);
+export async function extractAssessmentPlanFromFile(
+    file: File,
+    _apiKey?: string,
+    model?: string,
+    onProgress?: (completed: number, total: number) => void
+): Promise<AssessmentPlanExtraction> {
+    const selectedModel = normalizeGeminiModel(model);
+    const chunks = await splitAssessmentDocument(file);
+    const results: (unknown[] | null)[] = new Array(chunks.length).fill(null);
+    const errors: unknown[] = [];
+    let completed = 0;
+    let nextIndex = 0;
+    onProgress?.(0, chunks.length);
 
-        if (Array.isArray(data)) {
-            return data;
-        } else if (typeof data === 'object' && data !== null) {
-            return [data];
+    const worker = async () => {
+        while (nextIndex < chunks.length) {
+            const index = nextIndex++;
+            try {
+                results[index] = await extractAssessmentChunk(chunks[index], selectedModel);
+            } catch (error) {
+                console.error(`Error extracting assessment plan (pages ${chunks[index].firstPage}-${chunks[index].lastPage}):`, error);
+                errors.push(error);
+            }
+            onProgress?.(++completed, chunks.length);
         }
-        return [];
-    } catch (error) {
-        console.error("Error extracting assessment plan:", error);
-        throw error;
+    };
+    await Promise.all(Array.from({ length: Math.min(PDF_CHUNK_CONCURRENCY, chunks.length) }, worker));
+
+    if (results.every(result => result === null)) {
+        throw errors[0] instanceof Error ? errors[0] : new Error('평가 계획을 분석하지 못했습니다.');
     }
+
+    const failedPages = chunks
+        .filter((_, index) => results[index] === null)
+        .map(chunk => (chunk.firstPage === chunk.lastPage ? `${chunk.firstPage}쪽` : `${chunk.firstPage}~${chunk.lastPage}쪽`));
+    return {
+        plans: normalizeExtractedPlans(results.flatMap(result => result || [])),
+        failedPages,
+    };
 }
 
 export async function extractScheduleEventsFromImage(

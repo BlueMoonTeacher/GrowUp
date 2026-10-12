@@ -38,6 +38,7 @@ const supportedModels = new Set([
 const requestWindows = new Map();
 const rateLimitWindowMs = 60_000;
 const maxAiRequestsPerWindow = 30;
+const geminiRequestTimeoutMs = 270_000;
 const parseKeyRequest = express.json({ limit: '4kb' });
 const parseAiRequest = express.json({ limit: '20mb' });
 
@@ -199,7 +200,8 @@ app.post(
       }
 
       plaintextKey = await decryptApiKey(snapshot.data().ciphertext);
-      const ai = new GoogleGenAI({ apiKey: plaintextKey });
+      // Cloud Run cuts requests at 300s; fail first so the client gets a readable error.
+      const ai = new GoogleGenAI({ apiKey: plaintextKey, httpOptions: { timeout: geminiRequestTimeoutMs } });
       phase = 'generate';
       const response = await generateWithModelFallback(ai, { model, contents, config }, supportedModels);
       if (!response.text?.trim()) {

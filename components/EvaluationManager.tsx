@@ -255,6 +255,7 @@ const AssessmentSetup = ({
     const [isProcessing, setIsProcessing] = useState(false);
     const [processingProgress, setProcessingProgress] = useState(0);
     const [processingMessage, setProcessingMessage] = useState('');
+    const [processingDetail, setProcessingDetail] = useState('');
     const [previewData, setPreviewData] = useState<Omit<Assessment, 'id' | 'createdAt' | 'schoolYear'>[]>([]);
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -313,33 +314,46 @@ const AssessmentSetup = ({
         setIsProcessing(true);
         setProcessingProgress(0);
         setProcessingMessage("파일을 읽고 있습니다...");
-        // Fake progress for UX
+        setProcessingDetail('');
+        // Creeps toward the end of the current section so long AI calls still show movement.
+        let progressCap = 90;
         const progressInterval = setInterval(() => {
-            setProcessingProgress(prev => Math.min(prev + Math.random() * 10, 90));
-        }, 200);
-        
+            setProcessingProgress(prev => Math.min(prev + Math.random() * 2, progressCap));
+        }, 400);
+
         try {
-            const extractedPlans = await extractAssessmentPlanFromFile(
-                file, 
+            const { plans: extractedPlans, failedPages } = await extractAssessmentPlanFromFile(
+                file,
                 settings.geminiApiKey,
-                settings.geminiModel
+                settings.geminiModel,
+                (completed, total) => {
+                    if (total <= 1) return;
+                    progressCap = Math.min(95, 5 + (90 * (completed + 1)) / total);
+                    setProcessingProgress(prev => Math.max(prev, 5 + (90 * completed) / total));
+                    setProcessingDetail(`문서를 ${total}개 구간으로 나누어 분석 중 (${completed}/${total} 완료)`);
+                }
             );
             clearInterval(progressInterval);
             setProcessingProgress(100);
             if (extractedPlans.length === 0) {
-                await showAlert("문서에서 평가 계획을 추출하지 못했습니다.");
+                setIsProcessing(false);
+                await showAlert("문서에서 평가 계획을 추출하지 못했습니다. 표가 선명하게 보이는 PDF 또는 이미지인지 확인해 주세요.");
                 return;
             }
-            setTimeout(() => {
+            setTimeout(async () => {
                 setPreviewData(extractedPlans);
                 setIsPreviewOpen(true);
                 setIsProcessing(false);
+                if (failedPages.length > 0) {
+                    await showAlert(`일부 구간(${failedPages.join(', ')})은 분석하지 못했습니다. 미리보기에서 누락된 항목을 확인해 주세요.`);
+                }
             }, 500);
         } catch (err) {
             console.error(err);
             clearInterval(progressInterval);
             setIsProcessing(false);
-            await showAlert("파일 처리 중 오류가 발생했습니다.");
+            const reason = err instanceof Error && err.message ? `\n${err.message}` : '';
+            await showAlert(`파일 처리 중 오류가 발생했습니다.${reason}`);
         } finally {
             if (fileInputRef.current) fileInputRef.current.value = '';
         }
@@ -404,6 +418,7 @@ const AssessmentSetup = ({
                                 <div className="bg-primary h-2.5 rounded-full transition-all duration-300 ease-out" style={{ width: `${processingProgress}%` }}></div>
                             </div>
                             <p className="text-sm text-gray-600 text-center font-medium min-h-[3rem] flex items-center justify-center">{processingMessage}</p>
+                            {processingDetail && <p className="text-xs text-gray-500 text-center">{processingDetail}</p>}
                         </div>
                     </div>
                  )}

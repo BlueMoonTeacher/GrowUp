@@ -35,6 +35,22 @@ test('missing model retries with an available approved model and preserves the i
   assert.equal(calls.length, 2);
 });
 
+test('fallback drops model-specific thinking settings', async () => {
+  const calls = [];
+  const request = { model: 'missing', contents: {}, config: { responseMimeType: 'application/json', thinkingConfig: { thinkingLevel: 'low' } } };
+  const ai = { models: {
+    generateContent: async input => { calls.push(input); if (input.model === 'missing') throw { status: 404 }; return { text: '[]' }; },
+    list: async function* () { yield { name: 'models/available', supportedActions: ['generateContent'] }; },
+  } };
+  await generateWithModelFallback(ai, request, new Set(['missing', 'available']));
+  assert.deepEqual(calls[1], { model: 'available', contents: {}, config: { responseMimeType: 'application/json' } });
+});
+
+test('aborted or timed out Gemini calls report a timeout', () => {
+  assert.equal(classifyGeminiError({ name: 'AbortError' }, 'generate')[1], 'gemini-timeout');
+  assert.equal(classifyGeminiError({ status: 504 }, 'generate')[1], 'gemini-timeout');
+});
+
 for (const status of [400, 401, 403, 429, 503]) {
   test(`does not retry or list models for ${status}`, async () => {
     const error = { status };
